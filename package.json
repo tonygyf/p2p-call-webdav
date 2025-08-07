@@ -10,6 +10,7 @@
     "install-deps": "npm install"
   },
   "dependencies": {
+    "sqlite3": "^5.1.7",
     "webdav": "^4.5.0"
   },
   "devDependencies": {

@@ -35,7 +35,8 @@ module.exports = {
    * 文件路径配置
    */
   paths: {
-    messages: 'messages/user1-user2',
-    files: 'files/user1-user2'
+    messages: 'chat_messages',
+    files: 'chat_rooms',
+    users: 'users'
   }
 };
