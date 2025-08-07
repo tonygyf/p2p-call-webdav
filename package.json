@@ -1,0 +1,34 @@
+{
+  "name": "webdav-p2p-chat",
+  "version": "1.0.0",
+  "description": "基于WebDAV的点对点加密聊天应用",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "install-deps": "npm install"
+  },
+  "dependencies": {
+    "webdav": "^4.5.0"
+  },
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.webdav.chat",
+    "productName": "WebDAV P2P Chat",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/**/*",
+      "!dist/**/*"
+    ]
+  },
+  "author": "tonygyf",
+  "license": "MIT",
+  "packageManager": "pnpm@10.14.0+sha512.ad27a79641b49c3e481a16a805baa71817a04bbe06a38d17e60e2eaee83f6a146c6a688125f5792e48dd5ba30e7da52a5cda4c3992b9ccf333f9ce223af84748"
+}

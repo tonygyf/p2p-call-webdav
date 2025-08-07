@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>WebDAV P2P Chat</title>
+  <style>
+    body { font-family: sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px }
+    #chat-container { height: 500px; border: 1px solid #ccc; padding: 10px; overflow-y: auto; margin-bottom: 10px }
+    .message { margin: 5px 0; padding: 8px; border-radius: 5px; max-width: 80% }
+    .sent { background-color: #d1e7dd; margin-left: auto }
+    .received { background-color: #f8f9fa }
+    .file-message { background-color: #e9ecef; padding: 5px; border-left: 3px solid #0d6efd }
+    #controls { display: flex; gap: 10px }
+    #message-input { flex: 1; padding: 8px }
+    #file-input { display: none }
+  </style>
+</head>
+<body>
+  <div id="chat-container"></div>
+  <div id="controls">
+    <input type="text" id="message-input" placeholder="Type a message...">
+    <input type="file" id="file-input">
+    <button id="attach-button">📎</button>
+    <button id="send-button">Send</button>
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>
