@@ -93,6 +93,73 @@ function addMessage(text, isOwn = false, isFile = false) {
   }
 }
 
+/**
+ * 初始化WebDAV目录和上传数据库
+ * @returns {Promise<void>}
+ */
+async function initWebDAVFoldersAndDB() {
+  try {
+    // 检查并创建消息目录
+    try {
+      await client.getDirectoryContents(config.paths.messages);
+    } catch (e) {
+      if (e.response && e.response.status === 404) {
+        await client.createDirectory(config.paths.messages);
+      } else {
+        throw e;
+      }
+    }
+    // 检查并创建文件目录
+    try {
+      await client.getDirectoryContents(config.paths.files);
+    } catch (e) {
+      if (e.response && e.response.status === 404) {
+        await client.createDirectory(config.paths.files);
+      } else {
+        throw e;
+      }
+    }
+    // 检查并创建 "call" 目录
+    const callFolderPath = `${config.paths.files}/call`;
+    try {
+      await client.getDirectoryContents(callFolderPath);
+    } catch (e) {
+      if (e.response && e.response.status === 404) {
+        await client.createDirectory(callFolderPath);
+      } else {
+        throw e;
+      }
+    }
+    // 上传本地数据库文件到files目录
+    const dbPath = 'init/MySQLiteDB.db';
+    const dbFileName = `${config.paths.files}/MySQLiteDB.db`;
+    const dbCallFileName = `${config.paths.files}/call/MySQLiteDB.db`;
+    // 仅在WebDAV上没有数据库时上传
+    let needUpload = false;
+    try {
+      await client.stat(dbFileName);
+    } catch (e) {
+      if (e.response && e.response.status === 404) {
+        needUpload = true;
+      } else {
+        throw e;
+      }
+    }
+    if (needUpload) {
+      // 读取本地数据库文件
+      const fs = require('fs');
+      const dbBuffer = fs.readFileSync(dbPath);
+      await client.putFileContents(dbFileName, dbBuffer, { overwrite: false });
+      await client.putFileContents(dbCallFileName, dbBuffer, { overwrite: false });
+    }
+  } catch (error) {
+    handleError(error, 'WebDAV初始化失败');
+  }
+}
+
+// 初始化WebDAV目录和数据库
+initWebDAVFoldersAndDB();
+
 attachButton.addEventListener('click', () => {
   fileInput.click();
 });

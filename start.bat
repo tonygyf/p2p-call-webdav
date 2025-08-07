@@ -1,4 +1,5 @@
 @echo off
+chcp 65001
 echo 启动 WebDAV P2P Chat...
 
 REM 检查node_modules是否存在
