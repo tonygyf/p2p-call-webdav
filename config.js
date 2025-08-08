@@ -26,7 +26,7 @@ module.exports = {
    * 应用配置
    */
   app: {
-    pollInterval: 5000, // 消息轮询间隔（毫秒）
+    pollInterval: 10000, // 消息轮询间隔（毫秒）
     windowWidth: 1000,
     windowHeight: 700
   },

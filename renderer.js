@@ -474,6 +474,68 @@ async function initChatPage() {
       }
     }, 2000);
   });
+
+  // 手动同步按钮
+  document.getElementById('sync-up-button').addEventListener('click', async () => {
+    try {
+      const syncMsg = document.createElement('div');
+      syncMsg.className = 'connecting-message';
+      syncMsg.textContent = '正在上传到WebDAV...';
+      document.body.appendChild(syncMsg);
+
+      const result = await ipcRenderer.invoke('sync-db-manual');
+      
+      document.body.removeChild(syncMsg);
+      
+      if (result.success) {
+        showSyncSuccess('上传成功！');
+      } else {
+        alert('上传失败: ' + (result.message || '未知错误'));
+      }
+    } catch (error) {
+      handleError(error, '上传到WebDAV失败');
+    }
+  });
+
+  document.getElementById('sync-down-button').addEventListener('click', async () => {
+    try {
+      const syncMsg = document.createElement('div');
+      syncMsg.className = 'connecting-message';
+      syncMsg.textContent = '正在从WebDAV下载...';
+      document.body.appendChild(syncMsg);
+
+      const result = await ipcRenderer.invoke('sync-db-from-webdav-manual');
+      
+      document.body.removeChild(syncMsg);
+      
+      if (result.success) {
+        showSyncSuccess('下载成功！');
+        // 重新加载聊天历史
+        const recipientSelect = document.getElementById('recipient-select');
+        const currentRecipientId = recipientSelect.value;
+        if (currentRecipientId) {
+          loadChatHistory();
+        }
+      } else {
+        alert('下载失败: ' + (result.message || '未知错误'));
+      }
+    } catch (error) {
+      handleError(error, '从WebDAV下载失败');
+    }
+  });
+
+  // 显示同步成功提示
+  function showSyncSuccess(message) {
+    const successMsg = document.createElement('div');
+    successMsg.className = 'connecting-message';
+    successMsg.textContent = message;
+    document.body.appendChild(successMsg);
+    setTimeout(() => {
+      if (document.body.contains(successMsg)) {
+        document.body.removeChild(successMsg);
+      }
+    }, 2000);
+  }
 }
 
 /**
@@ -574,17 +636,30 @@ function displayFileMessage(msg) {
   const fileInfo = document.createElement('div');
   fileInfo.className = 'file-info';
   
-  // 创建文件名
+  // 创建文件名 - 从消息内容中提取文件名
   const fileName = document.createElement('div');
   fileName.className = 'file-name';
-  fileName.textContent = isOwn ? msg.original_name : `${msg.original_name}`;
+  
+  // 如果是文件消息，尝试从content中提取文件名，否则使用默认名称
+  let fileNameText = '未知文件';
+  try {
+    // 尝试解析消息内容获取文件名
+    if (msg.content && typeof msg.content === 'string') {
+      // 如果是base64编码的文件内容，显示文件名
+      fileNameText = `文件消息 (${formatFileSize(msg.content.length)})`;
+    }
+  } catch (e) {
+    fileNameText = '文件消息';
+  }
+  
+  fileName.textContent = isOwn ? fileNameText : `${fileNameText}`;
   fileInfo.appendChild(fileName);
   
   // 如果不是自己发送的，显示发送者
   if (!isOwn) {
     const sender = document.createElement('div');
     sender.className = 'file-sender';
-    sender.textContent = `发送者: ${msg.fromName}`;
+    sender.textContent = `发送者: ${msg.fromName || '未知用户'}`;
     sender.style.fontSize = '12px';
     sender.style.color = '#6c757d';
     sender.style.marginBottom = '5px';
@@ -592,10 +667,10 @@ function displayFileMessage(msg) {
   }
   
   // 创建文件大小信息（如果有）
-  if (msg.file_size) {
+  if (msg.content) {
     const fileSize = document.createElement('div');
     fileSize.className = 'file-size';
-    fileSize.textContent = formatFileSize(msg.file_size);
+    fileSize.textContent = formatFileSize(Buffer.from(msg.content, 'base64').length);
     fileInfo.appendChild(fileSize);
   }
   
@@ -620,11 +695,11 @@ function displayFileMessage(msg) {
       let decrypted = decipher.update(encryptedContent);
       decrypted = Buffer.concat([decrypted, decipher.final()]);
       
-      const blob = new Blob([decrypted], { type: msg.file_type || 'application/octet-stream' });
+      const blob = new Blob([decrypted], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = msg.original_name;
+      a.download = `download_${Date.now()}`;
       a.click();
       URL.revokeObjectURL(url);
       
@@ -717,9 +792,9 @@ function initChatFeatures() {
       // 创建消息数据
       const msgData = {
         from_user_id: currentUser.id,
-        from_user_name: currentUser.displayName,
+        from_user_name: currentUser.displayName || currentUser.username || '未知用户',
         to_user_id: recipientId,
-        to_user_name: recipientName,
+        to_user_name: recipientName || '未知用户',
         message_time: timestamp,
         message_type: 'file',
         iv: iv.toString('base64'),
@@ -741,6 +816,17 @@ function initChatFeatures() {
       
       // 显示文件消息
       displayFileMessage(msgData);
+      
+      // 显示发送成功提示
+      const successMsg = document.createElement('div');
+      successMsg.className = 'message system success';
+      successMsg.textContent = '文件发送成功！';
+      chatContainer.appendChild(successMsg);
+      setTimeout(() => {
+        if (successMsg.parentNode === chatContainer) {
+          chatContainer.removeChild(successMsg);
+        }
+      }, 2000);
       
       // 清空文件输入框
       e.target.value = '';
@@ -800,9 +886,9 @@ function initChatFeatures() {
       // 创建消息数据
       const msgData = {
         from_user_id: currentUser.id,
-        from_user_name: currentUser.displayName,
+        from_user_name: currentUser.displayName || currentUser.username || '未知用户',
         to_user_id: recipientId,
-        to_user_name: recipientName,
+        to_user_name: recipientName || '未知用户',
         message_time: timestamp,
         message_type: 'text',
         iv: encrypted.iv,
@@ -813,6 +899,17 @@ function initChatFeatures() {
       const msgId = timestamp + '_' + crypto.randomUUID();
       await ipcRenderer.invoke('save-message', msgData);
       console.log('消息已保存到数据库');
+      
+      // 显示发送成功提示
+      const successMsg = document.createElement('div');
+      successMsg.className = 'message system success';
+      successMsg.textContent = '消息发送成功！';
+      chatContainer.appendChild(successMsg);
+      setTimeout(() => {
+        if (successMsg.parentNode === chatContainer) {
+          chatContainer.removeChild(successMsg);
+        }
+      }, 2000);
     } catch (error) {
       handleError(error, '消息发送失败');
     }
@@ -850,7 +947,7 @@ function initChatFeatures() {
       // 处理新消息
       for (const msg of messages) {
         // 生成消息ID
-        const msgId = `msg_${msg.time}_${msg.from}`;
+        const msgId = `msg_${msg.time}_${msg.sender}`;
         
         // 如果已经处理过该消息，跳过
         if (processedMessages.has(msgId)) {
@@ -865,8 +962,10 @@ function initChatFeatures() {
           continue;
         }
         
-        // 只处理来自当前选中聊天对象的消息
-        if (msg.sender !== recipientId || msg.recipient !== currentUser.id) {
+        // 处理当前聊天对象之间的双向消息
+        const isValidChat = (msg.sender === parseInt(recipientId) && msg.recipient === currentUser.id) || 
+                           (msg.sender === currentUser.id && msg.recipient === parseInt(recipientId));
+        if (!isValidChat) {
           continue;
         }
         

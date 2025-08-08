@@ -184,14 +184,7 @@ async function syncDbFromWebDAV() {
         content = Buffer.from(content);
       }
       
-      // 备份当前数据库（如果存在）
-      if (fs.existsSync(localDbPath)) {
-        const backupPath = `${localDbPath}.backup-${Date.now()}`;
-        fs.copyFileSync(localDbPath, backupPath);
-        console.log(`本地数据库已备份到: ${backupPath}`);
-      }
-      
-      // 写入下载的数据库文件
+      // 直接覆盖当前数据库文件
       fs.writeFileSync(localDbPath, content);
       console.log('从WebDAV同步数据库成功。');
     } catch (e) {
@@ -259,7 +252,7 @@ ipcMain.handle('get-users', async () => {
   try {
     const dbInstance = getDb();
     return new Promise((resolve, reject) => {
-      dbInstance.all("SELECT id, username, nickname, avatar FROM users", [], (err, rows) => {
+      dbInstance.all("SELECT id, username, COALESCE(nickname, username) as nickname, avatar FROM users", [], (err, rows) => {
         if (err) {
           handleError(err, '查询用户数据失败 (IPC)');
           reject(err);
@@ -360,19 +353,13 @@ ipcMain.handle('login-user', async (event, userId) => {
         dbInstance.run(
           "UPDATE users SET last_login = datetime('now') WHERE id = ?", 
           [userId], 
-          async function(err) {
+          function(err) {
             if (err) {
               console.error('更新登录时间失败:', err);
-              // 继续处理，不影响登录
             }
             
-            // 同步数据库到WebDAV
-            try {
-              await syncDbToWebDAV();
-            } catch (syncErr) {
-              console.error('数据库同步到WebDAV失败:', syncErr);
-              // 继续处理，不影响登录
-            }
+            // 仅在手动触发时同步数据库到WebDAV
+            console.log('登录成功（未自动同步到WebDAV）');
             
             resolve({ 
               success: true, 
@@ -393,12 +380,34 @@ ipcMain.handle('login-user', async (event, userId) => {
   }
 });
 
+// 手动同步数据库到WebDAV
+ipcMain.handle('sync-db-manual', async () => {
+  try {
+    await syncDbToWebDAV();
+    return { success: true, message: '数据库同步到WebDAV成功' };
+  } catch (error) {
+    handleError(error, '手动同步失败');
+    return { success: false, error: error.message };
+  }
+});
+
+// 手动从WebDAV同步数据库
+ipcMain.handle('sync-db-from-webdav-manual', async () => {
+  try {
+    await syncDbFromWebDAV();
+    return { success: true, message: '从WebDAV同步数据库成功' };
+  } catch (error) {
+    handleError(error, '手动同步失败');
+    return { success: false, error: error.message };
+  }
+});
+
 // 获取聊天用户列表（排除当前用户）
 ipcMain.handle('get-chat-users', async (event, currentUserId) => {
   try {
     const dbInstance = getDb();
     return new Promise((resolve, reject) => {
-      dbInstance.all("SELECT id, username, nickname, avatar FROM users WHERE id != ?", [currentUserId], (err, rows) => {
+      dbInstance.all("SELECT id, username, COALESCE(nickname, username) as nickname, avatar FROM users WHERE id != ?", [currentUserId], (err, rows) => {
         if (err) {
           handleError(err, '查询聊天用户数据失败 (IPC)');
           reject(err);
@@ -418,7 +427,6 @@ ipcMain.handle('save-message', async (event, messageData) => {
   try {
     const dbInstance = getDb();
     return new Promise((resolve, reject) => {
-      // 插入消息到数据库
       dbInstance.run(
         `INSERT INTO messages (from_user_id, from_user_name, to_user_id, to_user_name, 
           message_time, message_type, message_iv, message_content) 
@@ -433,30 +441,26 @@ ipcMain.handle('save-message', async (event, messageData) => {
           messageData.iv,
           messageData.content
         ],
-        async function(err) {
+        async function (err) {
           if (err) {
             handleError(err, '保存消息失败');
-            reject({ success: false, error: err.message });
+            reject(new Error('保存消息失败: ' + err.message));  // ✅ 关键修改点
             return;
           }
-          
-          // 同步数据库到WebDAV
-          try {
-            await syncDbToWebDAV();
-          } catch (syncErr) {
-            console.error('同步数据库到WebDAV失败:', syncErr);
-            // 继续处理，不影响消息保存
-          }
-          
+
+          // 仅在手动触发时同步数据库到WebDAV
+          console.log('消息保存成功（未自动同步到WebDAV）');
+
           resolve({ success: true });
         }
       );
     });
   } catch (error) {
     handleError(error, '保存消息失败');
-    return { success: false, error: error.message };
+    throw new Error('保存消息失败: ' + error.message); // ✅ 注意这里要 `throw` 而不是 `return`
   }
 });
+
 
 // 保存文件消息到数据库
 ipcMain.handle('save-file-message', async (event, messageData) => {
@@ -490,13 +494,8 @@ ipcMain.handle('save-file-message', async (event, messageData) => {
             return;
           }
           
-          // 同步数据库到WebDAV
-          try {
-            await syncDbToWebDAV();
-          } catch (syncErr) {
-            console.error('同步数据库到WebDAV失败:', syncErr);
-            // 继续处理，不影响消息保存
-          }
+          // 仅在手动触发时同步数据库到WebDAV
+          console.log('文件消息保存成功（未自动同步到WebDAV）');
           
           resolve({ success: true });
         }
@@ -511,15 +510,13 @@ ipcMain.handle('save-file-message', async (event, messageData) => {
 // 获取新消息
 ipcMain.handle('get-new-messages', async (event, { userId, recipientId, lastPollTime }) => {
   try {
-    // 先从WebDAV同步数据库
-    await syncDbFromWebDAV();
-    
+    // 使用本地数据库，不进行自动WebDAV同步
     const dbInstance = getDb();
     return new Promise((resolve, reject) => {
       // 查询新消息
       dbInstance.all(
-        `SELECT from_user_id as sender, from_user_name as fromName, 
-                to_user_id as recipient, to_user_name as toName, 
+        `SELECT from_user_id as sender, COALESCE(from_user_name, '未知用户') as fromName, 
+                to_user_id as recipient, COALESCE(to_user_name, '未知用户') as toName, 
                 message_time as time, message_type as type, 
                 message_iv as iv, message_content as content 
          FROM messages 
@@ -546,15 +543,13 @@ ipcMain.handle('get-new-messages', async (event, { userId, recipientId, lastPoll
 // 获取聊天历史记录
 ipcMain.handle('get-chat-history', async (event, { userId, recipientId }) => {
   try {
-    // 先从WebDAV同步数据库
-    await syncDbFromWebDAV();
-    
+    // 使用本地数据库，不进行自动WebDAV同步
     const dbInstance = getDb();
     return new Promise((resolve, reject) => {
       // 查询聊天历史记录
       dbInstance.all(
-        `SELECT from_user_id as sender, from_user_name as fromName, 
-                to_user_id as recipient, to_user_name as toName, 
+        `SELECT from_user_id as sender, COALESCE(from_user_name, '未知用户') as fromName, 
+                to_user_id as recipient, COALESCE(to_user_name, '未知用户') as toName, 
                 message_time as time, message_type as type, 
                 message_iv as iv, message_content as content 
          FROM messages 
@@ -595,8 +590,8 @@ function closeDb() {
 // 当Electron完成初始化并准备创建浏览器窗口时调用此方法
 app.whenReady().then(async () => {
   try {
-    await syncDbFromWebDAV(); // Get latest DB from WebDAV first
-    await initDatabase(); // Then open database connection
+    // 使用本地数据库，不自动从WebDAV同步
+    await initDatabase(); // 直接初始化本地数据库
     createWindow();
   } catch (error) {
     handleError(error, '应用启动失败');
