@@ -1,8 +1,7 @@
 const { createClient } = require('webdav');
 const crypto = require('crypto');
+const { ipcRenderer } = require('electron'); // Import ipcRenderer
 const config = require('./config');
-const sqlite3 = require('sqlite3').verbose();
-const fs = require('fs');
 
 /**
  * 加密算法和密钥配置
@@ -113,10 +112,10 @@ function addMessage(text, isOwn = false, isFile = false) {
 }
 
 /**
- * 初始化WebDAV目录和上传数据库
+ * 初始化WebDAV目录
  * @returns {Promise<void>}
  */
-async function initWebDAVFoldersAndDB() {
+async function initWebDAVFolders() {
   try {
     // 测试WebDAV连接
     await client.getDirectoryContents('/');
@@ -142,133 +141,28 @@ async function initWebDAVFoldersAndDB() {
         }
       }
     }
-    
-    // 上传本地数据库文件到users目录
-    const dbPath = 'init/MySQLiteDB.db';
-    // 检查init目录是否存在，如果不存在则创建
-    const initDir = 'init';
-    if (!fs.existsSync(initDir)) {
-      fs.mkdirSync(initDir);
-      console.log('创建本地init目录');
-    }
-    const dbFileName = `${config.paths.users}/MySQLiteDB.db`;
-    
-    // 检查本地数据库文件是否存在
-    if (!fs.existsSync(dbPath)) {
-      console.error('本地数据库文件不存在:', dbPath);
-      return;
-    }
-    
-    // 仅在WebDAV上没有数据库时上传
-    let needUpload = false;
-    try {
-      await client.stat(dbFileName);
-      console.log('WebDAV上数据库已存在');
-    } catch (e) {
-      if (e.response && e.response.status === 404) {
-        needUpload = true;
-        console.log('WebDAV上数据库不存在，需要上传');
-      } else {
-        throw e;
-      }
-    }
-    if (needUpload) {
-      // 读取本地数据库文件
-      const dbBuffer = fs.readFileSync(dbPath);
-      await client.putFileContents(dbFileName, dbBuffer, { overwrite: false });
-      console.log('数据库上传成功');
-    }
   } catch (error) {
-    handleError(error, 'WebDAV初始化失败');
+    handleError(error, 'WebDAV目录初始化失败');
   }
 }
 
 /**
- * 从WebDAV读取数据库并获取用户信息
+ * 从主进程获取用户信息
  */
-async function fetchUsersFromWebDAV() {
+async function fetchUsers() {
   try {
-    console.log('开始从WebDAV获取用户数据...');
-    console.log('WebDAV路径:', config.paths.users);
-    const dbFileName = `${config.paths.users}/MySQLiteDB.db`;
-    console.log('数据库文件路径:', dbFileName);
-    
-    // 检查数据库文件是否存在
-    try {
-      await client.stat(dbFileName);
-      console.log('WebDAV上数据库文件存在');
-    } catch (e) {
-      console.error('WebDAV上数据库文件不存在:', e.message);
-      return [];
-    }
-    
-    const content = await client.getFileContents(dbFileName, { format: 'buffer' });
-    console.log('成功获取数据库文件内容, 大小:', content.length, '字节');
-    
-    // 将Buffer写入临时文件
-    const tempFilename = 'temp_db.db';
-    fs.writeFileSync(tempFilename, content);
-    console.log('临时数据库文件已创建:', tempFilename);
-
-    // 连接到临时数据库
-    return new Promise((resolve, reject) => {
-      const db = new sqlite3.Database(tempFilename, (err) => {
-        if (err) {
-          handleError(err, '连接到临时数据库失败');
-          reject(err);
-          return;
-        }
-        console.log('连接到临时数据库成功');
-
-        // 先检查表是否存在
-        db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='users'", (err, row) => {
-          if (err) {
-            handleError(err, '检查表是否存在失败');
-            db.close();
-            fs.unlinkSync(tempFilename);
-            reject(err);
-            return;
-          }
-          
-          if (!row) {
-            console.error('数据库中不存在users表');
-            db.close();
-            fs.unlinkSync(tempFilename);
-            resolve([]);
-            return;
-          }
-          
-          // 修改查询，确保使用正确的表名 'users'
-          db.all("SELECT id, name FROM users", [], (err, rows) => {
-            if (err) {
-              handleError(err, '查询用户数据失败');
-              db.close();
-              fs.unlinkSync(tempFilename); // 删除临时文件
-              reject(err);
-              return;
-            }
-
-            console.log('获取到的用户数据:', rows);
-            db.close((err) => {
-              if (err) {
-                handleError(err, '关闭临时数据库失败');
-              }
-              fs.unlinkSync(tempFilename); // 删除临时文件
-              console.log('临时数据库已关闭并删除');
-            });
-            resolve(rows);
-          });
-        });
-      });
-    });
+    console.log('开始从主进程获取用户数据...');
+    const users = await ipcRenderer.invoke('get-users');
+    console.log('用户列表获取完成:', users);
+    return users;
   } catch (error) {
-    handleError(error, '从WebDAV读取数据库失败');
+    handleError(error, '从主进程获取用户失败');
     return [];
   }
 }
 
 /**
- * 注册新用户
+ * 通过主进程注册新用户
  * @param {string} username - 用户名
  * @returns {Promise<boolean>} 是否注册成功
  */
@@ -279,77 +173,14 @@ async function registerUser(username) {
   }
   
   try {
-    const dbFileName = `${config.paths.users}/MySQLiteDB.db`;
-    const content = await client.getFileContents(dbFileName, { format: 'buffer' });
-    // 将Buffer写入临时文件
-    const tempFilename = 'temp_db.db';
-    fs.writeFileSync(tempFilename, content);
-
-    return new Promise((resolve, reject) => {
-      const db = new sqlite3.Database(tempFilename, (err) => {
-        if (err) {
-          handleError(err, '连接到临时数据库失败');
-          reject(err);
-          return;
-        }
-
-        // 检查用户名是否已存在
-        db.get("SELECT id FROM users WHERE name = ?", [username], (err, row) => {
-          if (err) {
-            handleError(err, '查询用户数据失败');
-            db.close();
-            fs.unlinkSync(tempFilename);
-            reject(err);
-            return;
-          }
-
-          if (row) {
-            alert('用户名已存在');
-            db.close();
-            fs.unlinkSync(tempFilename);
-            resolve(false);
-            return;
-          }
-
-          // 插入新用户
-          db.run("INSERT INTO users (name) VALUES (?)", [username], async function(err) {
-            if (err) {
-              handleError(err, '创建用户失败');
-              db.close();
-              fs.unlinkSync(tempFilename);
-              reject(err);
-              return;
-            }
-
-            const userId = this.lastID;
-            console.log(`创建用户成功，ID: ${userId}`);
-
-            // 关闭数据库并上传回WebDAV
-            db.close(async (err) => {
-              if (err) {
-                handleError(err, '关闭临时数据库失败');
-                reject(err);
-                return;
-              }
-
-              try {
-                // 读取更新后的数据库文件
-                const updatedDbBuffer = fs.readFileSync(tempFilename);
-                // 上传到WebDAV
-                await client.putFileContents(dbFileName, updatedDbBuffer, { overwrite: true });
-                console.log('更新后的数据库上传成功');
-                fs.unlinkSync(tempFilename); // 删除临时文件
-                resolve(true);
-              } catch (error) {
-                handleError(error, '上传更新后的数据库失败');
-                fs.unlinkSync(tempFilename); // 删除临时文件
-                reject(error);
-              }
-            });
-          });
-        });
-      });
-    });
+    const result = await ipcRenderer.invoke('register-user', username);
+    if (result.success) {
+      console.log(`用户注册成功，ID: ${result.userId}`);
+      return true;
+    } else {
+      alert(result.message);
+      return false;
+    }
   } catch (error) {
     handleError(error, '注册用户失败');
     return false;
@@ -541,12 +372,12 @@ function initChatFeatures() {
 async function initApp() {
   try {
     console.log('开始初始化应用...');
-    // 初始化WebDAV目录和数据库
-    await initWebDAVFoldersAndDB();
+    // 初始化WebDAV目录
+    await initWebDAVFolders();
     
     console.log('开始获取用户列表...');
     // 获取用户列表
-    const users = await fetchUsersFromWebDAV();
+    const users = await fetchUsers();
     console.log('用户列表获取完成:', users);
     displayUserList(users);
     
@@ -569,7 +400,7 @@ async function initApp() {
       const success = await registerUser(username);
       if (success) {
         // 重新获取用户列表
-        const users = await fetchUsersFromWebDAV();
+        const users = await fetchUsers();
         displayUserList(users);
         // 返回登录页面
         registerContainer.classList.add('hidden');
@@ -594,3 +425,5 @@ async function initApp() {
 
 // 启动应用
 initApp();
+
+// End of file
