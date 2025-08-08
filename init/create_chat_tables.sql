@@ -10,13 +10,16 @@ CREATE TABLE users (
 
 -- 创建聊天室表（用于群聊）
 CREATE TABLE chat_rooms (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY,
     room_name TEXT NOT NULL,
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     creator_id INTEGER,
     FOREIGN KEY (creator_id) REFERENCES users(id)
 );
+
+-- System entry for private chats
+INSERT INTO chat_rooms (id, room_name, description) VALUES (0, 'Private', 'System private chat room');
 
 -- 创建用户-聊天室关联表
 CREATE TABLE user_rooms (
