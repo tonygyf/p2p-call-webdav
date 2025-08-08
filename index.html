@@ -9,7 +9,15 @@
     .message { margin: 5px 0; padding: 8px; border-radius: 5px; max-width: 80% }
     .sent { background-color: #d1e7dd; margin-left: auto }
     .received { background-color: #f8f9fa }
-    .file-message { background-color: #e9ecef; padding: 5px; border-left: 3px solid #0d6efd }
+    .system { background-color: #fff3cd; text-align: center; margin: 10px auto; max-width: 90% }
+    .file-message { background-color: #e9ecef; padding: 5px; border-left: 3px solid #0d6efd; display: flex; flex-wrap: wrap; align-items: center; gap: 10px }
+    .file-icon { font-size: 24px; }
+    .file-info { flex: 1; min-width: 150px; }
+    .file-name { font-weight: bold; word-break: break-all; }
+    .file-size { font-size: 12px; color: #6c757d; }
+    .file-download { background-color: #007bff; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; transition: background-color 0.2s; }
+    .file-download:hover { background-color: #0069d9; }
+    .file-download:disabled { background-color: #6c757d; cursor: not-allowed; }
     #controls { display: flex; gap: 10px }
     #message-input { flex: 1; padding: 8px }
     #file-input { display: none }
@@ -38,13 +46,397 @@
       border: 1px solid #ffcdd2;
     }
     
+    /* 系统消息样式 */
+    .system-message {
+      padding: 10px;
+      margin: 10px 0;
+      background-color: #f8f9fa;
+      border-left: 3px solid #6c757d;
+      color: #6c757d;
+      text-align: center;
+    }
+    
     /* 登录页面样式 */
-    #login-container { max-width: 400px; margin: 100px auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
-    #user-list { list-style: none; padding: 0; }
-    #user-list li { padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; }
-    #user-list li:hover { background-color: #f5f5f5; }
-    #user-list li.selected { background-color: #d1e7dd; }
-    .login-buttons { display: flex; justify-content: space-between; margin-top: 20px; }
+    #login-container { 
+      max-width: 400px; 
+      margin: 100px auto; 
+      padding: 20px; 
+      border: 1px solid #ccc; 
+      border-radius: 8px; 
+      text-align: center; 
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      background-color: #fff;
+    }
+    #user-list { 
+      list-style: none; 
+      padding: 0; 
+      max-height: 300px; 
+      overflow-y: auto; 
+      margin: 20px 0; 
+      border: 1px solid #eee;
+      border-radius: 5px;
+    }
+    .user-item { 
+      display: flex; 
+      align-items: center; 
+      padding: 10px; 
+      margin: 5px; 
+      border: 1px solid #ddd; 
+      border-radius: 5px; 
+      cursor: pointer; 
+      transition: all 0.2s ease;
+    }
+    .user-item:hover { 
+      background-color: #f5f5f5; 
+      transform: translateY(-2px);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    #user-list li.selected .user-item { 
+      background-color: #e3f2fd; 
+      border-color: #90caf9;
+    }
+    .avatar-placeholder { 
+      width: 40px; 
+      height: 40px; 
+      border-radius: 50%; 
+      background-color: #007bff; 
+      color: white; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      font-weight: bold; 
+      margin-right: 10px; 
+      flex-shrink: 0;
+    }
+    .user-avatar { 
+      width: 40px; 
+      height: 40px; 
+      border-radius: 50%; 
+      margin-right: 10px; 
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+    .user-name { 
+      flex-grow: 1; 
+      text-align: left; 
+      font-weight: 500;
+    }
+    .last-login {
+      font-size: 0.8em;
+      color: #6c757d;
+      margin-top: 3px;
+      text-align: left;
+    }
+    .no-user-message { 
+      padding: 20px; 
+      text-align: center; 
+      color: #6c757d; 
+    }
+    .login-buttons { 
+      display: flex; 
+      justify-content: space-between; 
+      margin-top: 20px; 
+    }
+    #login-button, #register-button { 
+      padding: 10px 20px; 
+      border: none; 
+      border-radius: 5px; 
+      cursor: pointer; 
+      transition: background-color 0.2s ease;
+      font-weight: 500;
+    }
+    #login-button { 
+      background-color: #007bff; 
+      color: white; 
+      flex-grow: 2;
+      margin-right: 10px;
+    }
+    #login-button:hover {
+      background-color: #0069d9;
+    }
+    #login-button:disabled { 
+      background-color: #cccccc; 
+      cursor: not-allowed; 
+    }
+    #register-button { 
+      background-color: #28a745; 
+      color: white; 
+      flex-grow: 1;
+    }
+    #register-button:hover {
+      background-color: #218838;
+    }
+    
+    /* 注册页面样式 */
+    #register-container { 
+      max-width: 400px; 
+      margin: 100px auto; 
+      padding: 20px; 
+      border: 1px solid #ccc; 
+      border-radius: 8px; 
+      text-align: center; 
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      background-color: #fff;
+    }
+    #register-name { 
+      width: 100%; 
+      padding: 12px; 
+      margin: 15px 0; 
+      border: 1px solid #ddd; 
+      border-radius: 5px; 
+      box-sizing: border-box; 
+      font-size: 16px;
+      transition: border-color 0.2s ease;
+    }
+    #register-name:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+    #register-submit, #register-cancel { 
+      padding: 10px 20px; 
+      margin: 0 5px; 
+      border: none; 
+      border-radius: 5px; 
+      cursor: pointer; 
+      transition: background-color 0.2s ease;
+      font-weight: 500;
+    }
+    #register-submit { 
+      background-color: #28a745; 
+      color: white; 
+    }
+    #register-submit:hover {
+      background-color: #218838;
+    }
+    #register-cancel { 
+      background-color: #dc3545; 
+      color: white; 
+    }
+    #register-cancel:hover {
+      background-color: #c82333;
+    }
+    
+    /* 聊天页面样式 */
+    #chat-page {
+      max-width: 800px;
+      margin: 20px auto;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      display: flex;
+      flex-direction: column;
+      height: 90vh;
+    }
+    
+    #chat-header {
+      background-color: #007bff;
+      color: white;
+      padding: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    #chat-recipient-selector {
+      margin-bottom: 15px;
+      padding: 10px;
+      background-color: #f8f9fa;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+    }
+    
+    #chat-recipient-selector label {
+      margin-right: 10px;
+      font-weight: bold;
+    }
+    
+    #recipient-select {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    #chat-title {
+      font-weight: 500;
+      font-size: 18px;
+    }
+    
+    #logout-button {
+      background-color: transparent;
+      border: 1px solid white;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+    
+    #logout-button:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    #chat-container {
+      flex: 1;
+      padding: 15px;
+      overflow-y: auto;
+      background-color: #f8f9fa;
+      border: none;
+    }
+    
+    #controls {
+      display: flex;
+      padding: 10px;
+      background-color: white;
+      border-top: 1px solid #eee;
+    }
+    
+    #message-input {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 20px;
+      margin-right: 10px;
+      font-size: 14px;
+      transition: border-color 0.2s ease;
+    }
+    
+    #message-input:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+    
+    #send-button, #attach-button {
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+    
+    #send-button {
+      background-color: #007bff;
+      color: white;
+      font-size: 16px;
+    }
+    
+    #send-button:hover {
+      background-color: #0069d9;
+    }
+    
+    #attach-button {
+      background-color: #f8f9fa;
+      color: #6c757d;
+      margin-right: 5px;
+    }
+    
+    #attach-button:hover {
+      background-color: #e9ecef;
+    }
+    
+    .message {
+      margin: 8px 0;
+      padding: 10px 15px;
+      border-radius: 18px;
+      max-width: 75%;
+      word-wrap: break-word;
+      position: relative;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .sent {
+      background-color: #007bff;
+      color: white;
+      margin-left: auto;
+      border-bottom-right-radius: 5px;
+    }
+    
+    .received {
+      background-color: white;
+      color: #212529;
+      margin-right: auto;
+      border-bottom-left-radius: 5px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+    
+    .system {
+      background-color: #fff3cd;
+      color: #856404;
+      text-align: center;
+      margin: 15px auto;
+      max-width: 90%;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+    
+    .file-message {
+      background-color: #e9ecef;
+      padding: 10px;
+      border-left: 3px solid #0d6efd;
+      border-radius: 5px;
+      margin: 10px 0;
+      display: flex;
+      align-items: center;
+    }
+    
+    .file-icon {
+      margin-right: 10px;
+      font-size: 24px;
+      color: #0d6efd;
+    }
+    
+    .file-info {
+      flex: 1;
+    }
+    
+    .file-name {
+      font-weight: 500;
+      margin-bottom: 5px;
+    }
+    
+    .file-size {
+      font-size: 12px;
+      color: #6c757d;
+    }
+    
+    .file-download {
+      background-color: #0d6efd;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background-color 0.2s ease;
+    }
+    
+    .file-download:hover {
+      background-color: #0b5ed7;
+    }
+    
+    .message-time {
+      font-size: 11px;
+      color: #999;
+      margin-top: 5px;
+      text-align: right;
+    }
+    
     .hidden { display: none; }
   </style>
 </head>
@@ -61,12 +453,22 @@
 
   <!-- 聊天页面 -->
   <div id="chat-page" class="hidden">
+    <div id="chat-header">
+      <div id="chat-title">WebDAV 聊天</div>
+      <button id="logout-button">退出登录</button>
+    </div>
+    <div id="chat-recipient-selector">
+      <label for="recipient-select">选择聊天对象:</label>
+      <select id="recipient-select">
+        <option value="" disabled selected>请选择聊天对象</option>
+      </select>
+    </div>
     <div id="chat-container"></div>
     <div id="controls">
-      <input type="text" id="message-input" placeholder="Type a message...">
+      <input type="text" id="message-input" placeholder="输入消息...">
       <input type="file" id="file-input">
       <button id="attach-button">📎</button>
-      <button id="send-button">Send</button>
+      <button id="send-button">发送</button>
     </div>
   </div>
 

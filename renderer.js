@@ -110,15 +110,31 @@ function decrypt(iv, content) {
 /**
  * 添加消息到聊天界面
  * @param {string} text - 消息文本
- * @param {boolean} isOwn - 是否为自己的消息
+ * @param {string|boolean} type - 消息类型：true表示自己发送的消息，false表示接收的消息，'system'表示系统消息
  * @param {boolean} isFile - 是否为文件消息
  */
-function addMessage(text, isOwn = false, isFile = false) {
+function addMessage(text, type = false, isFile = false) {
   try {
     const div = document.createElement('div');
-    div.className = `message ${isFile ? 'file-message' : ''} ${isOwn ? 'sent' : 'received'}`;
+    
+    // 根据类型设置样式
+    if (type === 'system') {
+      div.className = 'message system';
+    } else {
+      const isOwn = type === true;
+      div.className = `message ${isFile ? 'file-message' : ''} ${isOwn ? 'sent' : 'received'}`;
+    }
+    
     div.textContent = text;
-    div.style.margin = '5px 0';
+    
+    // 添加时间戳
+    if (type !== 'system') {
+      const timeSpan = document.createElement('div');
+      timeSpan.className = 'message-time';
+      timeSpan.textContent = new Date().toLocaleTimeString();
+      div.appendChild(timeSpan);
+    }
+    
     chatContainer.appendChild(div);
     chatContainer.scrollTop = chatContainer.scrollHeight;
   } catch (error) {
@@ -249,6 +265,16 @@ function displayUserList(users) {
   // 清空用户列表
   userList.innerHTML = '';
   
+  // 如果没有用户，显示提示
+  if (users.length === 0) {
+    const noUserMsg = document.createElement('div');
+    noUserMsg.className = 'no-user-message';
+    noUserMsg.textContent = '没有找到用户，请注册新用户';
+    userList.appendChild(noUserMsg);
+    loginButton.disabled = true;
+    return;
+  }
+  
   // 添加用户到列表
   users.forEach(user => {
     const li = document.createElement('li');
@@ -266,6 +292,10 @@ function displayUserList(users) {
       // 创建默认头像（用户名首字母）
       const avatarPlaceholder = document.createElement('div');
       avatarPlaceholder.className = 'avatar-placeholder';
+      // 使用随机颜色
+      const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
+      const colorIndex = user.id % colors.length;
+      avatarPlaceholder.style.backgroundColor = colors[colorIndex];
       avatarPlaceholder.textContent = user.displayName.charAt(0).toUpperCase();
       userDiv.appendChild(avatarPlaceholder);
     }
@@ -275,6 +305,15 @@ function displayUserList(users) {
     nameSpan.textContent = user.displayName;
     nameSpan.className = 'user-name';
     userDiv.appendChild(nameSpan);
+    
+    // 添加最后登录时间（如果有）
+    const lastLogin = localStorage.getItem(`lastLogin_${user.id}`);
+    if (lastLogin) {
+      const lastLoginSpan = document.createElement('span');
+      lastLoginSpan.className = 'last-login';
+      lastLoginSpan.textContent = `上次登录: ${lastLogin}`;
+      userDiv.appendChild(lastLoginSpan);
+    }
     
     li.appendChild(userDiv);
     li.dataset.userId = user.id;
@@ -289,31 +328,156 @@ function displayUserList(users) {
       loginButton.disabled = false;
       // 保存选中的用户
       currentUser = user;
+      // 更新登录按钮文本
+      loginButton.textContent = `登录 ${user.displayName}`;
+      console.log('已选择用户:', currentUser);
     });
     userList.appendChild(li);
   });
+  
+  // 默认选中第一个用户
+  if (users.length > 0 && !currentUser) {
+    const firstUser = userList.querySelector('li');
+    if (firstUser) {
+      firstUser.click();
+    }
+  }
 }
 
 /**
  * 初始化聊天页面
  */
-function initChatPage() {
+async function initChatPage() {
   // 隐藏登录页面，显示聊天页面
   loginContainer.classList.add('hidden');
   registerContainer.classList.add('hidden');
   chatPage.classList.remove('hidden');
   
   // 显示欢迎消息
-  addMessage(`欢迎, ${currentUser.displayName}!`, false);
+  addMessage(`欢迎, ${currentUser.displayName}!`, 'system');
   
-  // 更新页面标题
+  // 更新页面标题和聊天标题
   document.title = `WebDAV Chat - ${currentUser.displayName}`;
+  document.getElementById('chat-title').textContent = `WebDAV 聊天 - ${currentUser.displayName}`;
+  
+  // 获取聊天对象列表
+  try {
+    const recipientSelect = document.getElementById('recipient-select');
+    recipientSelect.innerHTML = '<option value="" disabled selected>请选择聊天对象</option>';
+    
+    // 显示加载中提示
+    const loadingOption = document.createElement('option');
+    loadingOption.disabled = true;
+    loadingOption.textContent = '加载中...';
+    recipientSelect.appendChild(loadingOption);
+    
+    // 获取聊天用户列表（排除当前用户）
+    const chatUsers = await ipcRenderer.invoke('get-chat-users', currentUser.id);
+    
+    // 移除加载中选项
+    recipientSelect.removeChild(loadingOption);
+    
+    if (chatUsers.length === 0) {
+      const noUserOption = document.createElement('option');
+      noUserOption.disabled = true;
+      noUserOption.textContent = '没有其他用户';
+      recipientSelect.appendChild(noUserOption);
+      
+      // 禁用消息输入和发送
+      messageInput.disabled = true;
+      sendButton.disabled = true;
+      attachButton.disabled = true;
+      
+      addMessage('没有其他用户可聊天，请等待其他用户注册', 'system');
+    } else {
+      // 添加用户选项
+      chatUsers.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = user.nickname || user.username;
+        option.dataset.username = user.username;
+        recipientSelect.appendChild(option);
+      });
+      
+      // 从本地存储中恢复上次选择的聊天对象
+      const lastRecipientId = localStorage.getItem(`lastRecipient_${currentUser.id}`);
+      if (lastRecipientId) {
+        recipientSelect.value = lastRecipientId;
+      }
+      
+      // 如果没有选中任何聊天对象，禁用消息输入和发送
+      if (!recipientSelect.value) {
+        messageInput.disabled = true;
+        sendButton.disabled = true;
+        attachButton.disabled = true;
+      }
+      
+      // 添加聊天对象选择事件
+      recipientSelect.addEventListener('change', () => {
+        const selectedRecipientId = recipientSelect.value;
+        if (selectedRecipientId) {
+          // 保存选择的聊天对象
+          localStorage.setItem(`lastRecipient_${currentUser.id}`, selectedRecipientId);
+          
+          // 清空聊天容器，重新加载聊天历史
+          chatContainer.innerHTML = '';
+          loadChatHistory();
+          
+          // 启用消息输入和发送
+          messageInput.disabled = false;
+          sendButton.disabled = false;
+          attachButton.disabled = false;
+          
+          // 更新聊天标题
+          const selectedOption = recipientSelect.options[recipientSelect.selectedIndex];
+          const recipientName = selectedOption.textContent;
+          document.getElementById('chat-title').textContent = `与 ${recipientName} 聊天`;
+        } else {
+          // 禁用消息输入和发送
+          messageInput.disabled = true;
+          sendButton.disabled = true;
+          attachButton.disabled = true;
+        }
+      });
+      
+      // 触发change事件，初始化聊天界面
+      const event = new Event('change');
+      recipientSelect.dispatchEvent(event);
+    }
+  } catch (error) {
+    handleError(error, '获取聊天用户失败');
+    addMessage('获取聊天用户失败，请重新登录', 'system');
+  }
   
   // 初始化聊天相关功能
   initChatFeatures();
   
-  // 加载聊天历史
-  loadChatHistory();
+  // 添加退出登录按钮事件
+  document.getElementById('logout-button').addEventListener('click', () => {
+    // 保存最后登录时间
+    localStorage.setItem(`lastLogin_${currentUser.id}`, new Date().toLocaleString());
+    
+    // 清空聊天容器
+    chatContainer.innerHTML = '';
+    
+    // 隐藏聊天页面，显示登录页面
+    chatPage.classList.add('hidden');
+    loginContainer.classList.remove('hidden');
+    
+    // 更新页面标题
+    document.title = 'WebDAV P2P Chat';
+    
+    // 显示退出成功提示
+    const logoutMsg = document.createElement('div');
+    logoutMsg.className = 'connecting-message';
+    logoutMsg.textContent = '已退出登录';
+    document.body.appendChild(logoutMsg);
+    setTimeout(() => {
+      if (document.body.contains(logoutMsg)) {
+        document.body.removeChild(logoutMsg);
+      }
+    }, 2000);
+  });
 }
 
 /**
@@ -321,6 +485,18 @@ function initChatPage() {
  */
 async function loadChatHistory() {
   try {
+    // 获取选中的聊天对象
+    const recipientSelect = document.getElementById('recipient-select');
+    const recipientId = recipientSelect.value;
+    if (!recipientId) {
+      // 如果没有选择聊天对象，显示提示
+      const noRecipientMsg = document.createElement('div');
+      noRecipientMsg.className = 'message system';
+      noRecipientMsg.textContent = '请选择聊天对象';
+      chatContainer.appendChild(noRecipientMsg);
+      return;
+    }
+    
     // 清空聊天容器
     chatContainer.innerHTML = '';
     
@@ -346,8 +522,26 @@ async function loadChatHistory() {
     // 移除加载提示
     chatContainer.removeChild(loadingMsg);
     
-    // 如果没有消息，显示提示
-    if (messageFiles.length === 0) {
+    // 过滤出与当前聊天对象相关的消息
+    const relevantMessages = [];
+    
+    for (const file of messageFiles) {
+      try {
+        const content = await client.getFileContents(`${webdavPaths.messages}/${file.basename}`);
+        const msg = JSON.parse(content.toString());
+        
+        // 只处理与当前用户和选中聊天对象相关的消息
+        if ((msg.from === currentUser.id && msg.to === recipientId) || 
+            (msg.from === recipientId && msg.to === currentUser.id)) {
+          relevantMessages.push({ file, msg });
+        }
+      } catch (error) {
+        console.error(`处理消息 ${file.basename} 失败:`, error);
+      }
+    }
+    
+    // 如果没有相关消息，显示提示
+    if (relevantMessages.length === 0) {
       const noMsgDiv = document.createElement('div');
       noMsgDiv.className = 'message system';
       noMsgDiv.textContent = '没有聊天记录，开始发送消息吧！';
@@ -356,28 +550,25 @@ async function loadChatHistory() {
     }
     
     // 限制加载的消息数量，避免过多消息导致性能问题
-    const recentMessages = messageFiles.slice(-50); // 只加载最近的50条消息
+    const recentMessages = relevantMessages.slice(-50); // 只加载最近的50条消息
+    
+    // 按时间升序排列，旧消息在前
+    recentMessages.sort((a, b) => a.msg.time - b.msg.time);
     
     // 加载消息
-    for (const file of recentMessages) {
-      try {
-        const content = await client.getFileContents(`${webdavPaths.messages}/${file.basename}`);
-        const msg = JSON.parse(content.toString());
-        
-        // 显示消息
-        if (msg.type === 'text') {
-          try {
-            const decrypted = decrypt(msg.iv, msg.content);
-            const isOwn = msg.from === currentUser.id;
-            addMessage(isOwn ? decrypted : `${msg.fromName}: ${decrypted}`, isOwn);
-          } catch (error) {
-            handleError(error, '消息解密失败');
-          }
-        } else if (msg.type === 'file') {
-          displayFileMessage(msg);
+    for (const { msg } of recentMessages) {
+      // 显示消息
+      if (msg.type === 'text') {
+        try {
+          const decrypted = decrypt(msg.iv, msg.content);
+          const isOwn = msg.from === currentUser.id;
+          // 根据消息是否是自己发送的来设置类型参数
+          addMessage(isOwn ? decrypted : `${msg.fromName}: ${decrypted}`, isOwn);
+        } catch (error) {
+          handleError(error, '消息解密失败');
         }
-      } catch (error) {
-        console.error(`加载消息 ${file.basename} 失败:`, error);
+      } else if (msg.type === 'file') {
+        displayFileMessage(msg);
       }
     }
     
@@ -399,37 +590,111 @@ async function loadChatHistory() {
  * @param {Object} msg - 消息对象
  */
 function displayFileMessage(msg) {
+  const isOwn = msg.from === currentUser.id;
   const fileDiv = document.createElement('div');
-  fileDiv.className = `message file-message ${msg.from === currentUser.id ? 'sent' : 'received'}`;
+  fileDiv.className = `message file-message ${isOwn ? 'sent' : 'received'}`;
   
-  const fileLink = document.createElement('a');
-  fileLink.href = '#';
-  fileLink.textContent = msg.from === currentUser.id ? 
-    `📎 ${msg.originalName}` : 
-    `📎 ${msg.originalName} (from ${msg.fromName})`;
+  // 创建文件图标
+  const fileIcon = document.createElement('div');
+  fileIcon.className = 'file-icon';
+  fileIcon.textContent = '📎';
+  fileDiv.appendChild(fileIcon);
   
-  fileLink.addEventListener('click', async () => {
+  // 创建文件信息容器
+  const fileInfo = document.createElement('div');
+  fileInfo.className = 'file-info';
+  
+  // 创建文件名
+  const fileName = document.createElement('div');
+  fileName.className = 'file-name';
+  fileName.textContent = isOwn ? msg.originalName : `${msg.originalName}`;
+  fileInfo.appendChild(fileName);
+  
+  // 如果不是自己发送的，显示发送者
+  if (!isOwn) {
+    const sender = document.createElement('div');
+    sender.className = 'file-sender';
+    sender.textContent = `发送者: ${msg.fromName}`;
+    sender.style.fontSize = '12px';
+    sender.style.color = '#6c757d';
+    sender.style.marginBottom = '5px';
+    fileInfo.appendChild(sender);
+  }
+  
+  // 创建文件大小信息（如果有）
+  if (msg.fileSize) {
+    const fileSize = document.createElement('div');
+    fileSize.className = 'file-size';
+    fileSize.textContent = formatFileSize(msg.fileSize);
+    fileInfo.appendChild(fileSize);
+  }
+  
+  fileDiv.appendChild(fileInfo);
+  
+  // 创建下载按钮
+  const downloadBtn = document.createElement('button');
+  downloadBtn.className = 'file-download';
+  downloadBtn.textContent = '下载';
+  
+  downloadBtn.addEventListener('click', async () => {
     try {
+      // 显示下载中状态
+      const originalText = downloadBtn.textContent;
+      downloadBtn.textContent = '下载中...';
+      downloadBtn.disabled = true;
+      
       const encryptedContent = await client.getFileContents(msg.content);
       const iv = Buffer.from(msg.iv, 'base64');
       const decipher = crypto.createDecipheriv(algorithm, key, iv);
       let decrypted = decipher.update(Buffer.from(encryptedContent));
       decrypted = Buffer.concat([decrypted, decipher.final()]);
       
-      const blob = new Blob([decrypted], { type: 'application/octet-stream' });
+      const blob = new Blob([decrypted], { type: msg.fileType || 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = msg.originalName;
       a.click();
       URL.revokeObjectURL(url);
+      
+      // 恢复按钮状态
+      setTimeout(() => {
+        downloadBtn.textContent = originalText;
+        downloadBtn.disabled = false;
+      }, 1000);
     } catch (error) {
       handleError(error, '文件下载失败');
+      downloadBtn.textContent = '下载失败';
+      setTimeout(() => {
+        downloadBtn.textContent = originalText;
+        downloadBtn.disabled = false;
+      }, 2000);
     }
   });
   
-  fileDiv.appendChild(fileLink);
+  fileDiv.appendChild(downloadBtn);
+  
+  // 添加时间戳
+  if (msg.time) {
+    const timeSpan = document.createElement('div');
+    timeSpan.className = 'message-time';
+    timeSpan.textContent = new Date(msg.time).toLocaleTimeString();
+    fileDiv.appendChild(timeSpan);
+  }
+  
   chatContainer.appendChild(fileDiv);
+}
+
+/**
+ * 格式化文件大小
+ * @param {number} bytes - 文件大小（字节）
+ * @returns {string} 格式化后的文件大小
+ */
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
 }
 
 /**
@@ -445,11 +710,21 @@ function initChatFeatures() {
     const file = e.target.files[0];
     if (!file) return;
 
+    // 获取选中的聊天对象
+    const recipientSelect = document.getElementById('recipient-select');
+    const recipientId = recipientSelect.value;
+    if (!recipientId) {
+      alert('请选择聊天对象');
+      return;
+    }
+    
+    const recipientName = recipientSelect.options[recipientSelect.selectedIndex].textContent;
+
     try {
       // 显示上传中提示
       const uploadingMsg = document.createElement('div');
       uploadingMsg.className = 'message system uploading sent';
-      uploadingMsg.textContent = `正在上传: ${file.name}...`;
+      uploadingMsg.textContent = `正在上传: ${file.name} (${formatFileSize(file.size)})...`;
       chatContainer.appendChild(uploadingMsg);
       chatContainer.scrollTop = chatContainer.scrollHeight;
       
@@ -467,11 +742,16 @@ function initChatFeatures() {
       const fileName = `${webdavPaths.files}/${fileId}`;
       await client.putFileContents(fileName, encrypted, { overwrite: false });
 
+      // 获取当前时间戳
+      const timestamp = Date.now();
+      
       // 创建消息数据
       const msgData = {
         from: currentUser.id,
         fromName: currentUser.displayName,
-        time: Date.now(),
+        to: recipientId,
+        toName: recipientName,
+        time: timestamp,
         type: 'file',
         iv: iv.toString('base64'),
         content: fileName,
@@ -481,7 +761,7 @@ function initChatFeatures() {
       };
 
       // 生成消息ID并保存消息数据
-      const msgId = Date.now() + '_' + crypto.randomUUID();
+      const msgId = timestamp + '_' + crypto.randomUUID();
       await client.putFileContents(
         `${webdavPaths.messages}/msg_${msgId}.json`,
         JSON.stringify(msgData),
@@ -497,6 +777,12 @@ function initChatFeatures() {
       // 清空文件输入框
       e.target.value = '';
     } catch (error) {
+      // 移除上传中提示（如果存在）
+      const uploadingMsg = document.querySelector('.message.system.uploading');
+      if (uploadingMsg) chatContainer.removeChild(uploadingMsg);
+      
+      // 显示错误消息
+      addMessage(`文件上传失败: ${error.message}`, 'system');
       handleError(error, '文件上传失败');
       e.target.value = '';
     }
@@ -520,7 +806,20 @@ function initChatFeatures() {
     const message = messageInput.value.trim();
     if (!message) return;
 
+    // 获取选中的聊天对象
+    const recipientSelect = document.getElementById('recipient-select');
+    const recipientId = recipientSelect.value;
+    if (!recipientId) {
+      alert('请选择聊天对象');
+      return;
+    }
+    
+    const recipientName = recipientSelect.options[recipientSelect.selectedIndex].textContent;
+
     try {
+      // 获取当前时间
+      const timestamp = Date.now();
+      
       // 先在界面上显示消息
       addMessage(message, true);
       
@@ -534,14 +833,16 @@ function initChatFeatures() {
       const msgData = {
         from: currentUser.id,
         fromName: currentUser.displayName,
-        time: Date.now(),
+        to: recipientId,
+        toName: recipientName,
+        time: timestamp,
         type: 'text',
         iv: encrypted.iv,
         content: encrypted.content
       };
 
       // 生成消息ID并保存消息数据
-      const msgId = Date.now() + '_' + crypto.randomUUID();
+      const msgId = timestamp + '_' + crypto.randomUUID();
       await client.putFileContents(
         `${webdavPaths.messages}/msg_${msgId}.json`,
         JSON.stringify(msgData),
@@ -566,6 +867,14 @@ function initChatFeatures() {
    */
   async function pollNewMessages() {
     try {
+      // 获取选中的聊天对象
+      const recipientSelect = document.getElementById('recipient-select');
+      const recipientId = recipientSelect.value;
+      if (!recipientId) {
+        // 如果没有选择聊天对象，不处理新消息
+        return;
+      }
+      
       // 获取消息文件列表
       const files = await client.getDirectoryContents(webdavPaths.messages);
       
@@ -604,11 +913,17 @@ function initChatFeatures() {
             continue;
           }
           
+          // 只处理来自当前选中聊天对象的消息
+          if (msg.from !== recipientId || msg.to !== currentUser.id) {
+            continue;
+          }
+          
           // 根据消息类型处理
           if (msg.type === 'text') {
             try {
               const decrypted = decrypt(msg.iv, msg.content);
-              addMessage(`${msg.fromName}: ${decrypted}`);
+              // 添加消息，false表示接收的消息
+              addMessage(`${msg.fromName}: ${decrypted}`, false);
             } catch (error) {
               handleError(error, '消息解密失败');
             }
@@ -672,9 +987,41 @@ async function initApp() {
     displayUserList(users);
     
     // 登录按钮点击事件
-    loginButton.addEventListener('click', () => {
+    loginButton.addEventListener('click', async () => {
       if (currentUser) {
-        initChatPage();
+        try {
+          // 显示登录中提示
+          const loginMsg = document.createElement('div');
+          loginMsg.className = 'connecting-message';
+          loginMsg.textContent = '正在登录...';
+          document.body.appendChild(loginMsg);
+          
+          // 通过IPC调用验证用户
+          const result = await ipcRenderer.invoke('login-user', currentUser.id);
+          
+          // 移除登录中提示
+          document.body.removeChild(loginMsg);
+          
+          if (result.success) {
+            // 更新当前用户信息
+            currentUser = result.user;
+            
+            // 记录登录时间和当前用户
+            const loginTime = new Date().toLocaleString();
+            localStorage.setItem(`lastLogin_${currentUser.id}`, loginTime);
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            
+            // 初始化聊天页面
+            initChatPage();
+          } else {
+            alert(result.message || '登录失败');
+          }
+        } catch (error) {
+          handleError(error, '登录失败');
+          alert('登录失败，请重试');
+        }
+      } else {
+        alert('请选择一个用户进行登录');
       }
     });
     
@@ -682,6 +1029,8 @@ async function initApp() {
     registerButton.addEventListener('click', () => {
       loginContainer.classList.add('hidden');
       registerContainer.classList.remove('hidden');
+      // 聚焦到用户名输入框
+      registerName.focus();
     });
     
     // 注册提交按钮点击事件
@@ -689,6 +1038,17 @@ async function initApp() {
       const username = registerName.value.trim();
       const success = await registerUser(username);
       if (success) {
+        // 显示注册成功提示
+        const registerSuccessMsg = document.createElement('div');
+        registerSuccessMsg.className = 'connecting-message';
+        registerSuccessMsg.textContent = '注册成功！';
+        document.body.appendChild(registerSuccessMsg);
+        setTimeout(() => {
+          if (document.body.contains(registerSuccessMsg)) {
+            document.body.removeChild(registerSuccessMsg);
+          }
+        }, 2000);
+        
         // 重新获取用户列表
         const users = await fetchUsers();
         displayUserList(users);
@@ -697,6 +1057,23 @@ async function initApp() {
         loginContainer.classList.remove('hidden');
         // 清空注册表单
         registerName.value = '';
+        
+        // 自动选择新注册的用户
+        const newUserItem = Array.from(userList.querySelectorAll('li')).find(li => {
+          const userName = li.querySelector('.user-name').textContent;
+          return userName === username;
+        });
+        if (newUserItem) {
+          newUserItem.click();
+        }
+      }
+    });
+    
+    // 注册表单回车键提交
+    registerName.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        registerSubmit.click();
       }
     });
     
@@ -707,6 +1084,30 @@ async function initApp() {
       // 清空注册表单
       registerName.value = '';
     });
+    
+    // 检查是否有上次登录的用户信息
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        // 查找用户是否存在于当前用户列表中
+        const userExists = users.some(user => user.id === parsedUser.id);
+        if (userExists) {
+          // 自动选择上次登录的用户
+          const userItem = Array.from(userList.querySelectorAll('li')).find(li => {
+            return li.dataset.userId === parsedUser.id.toString();
+          });
+          if (userItem) {
+            userItem.click();
+            // 可以选择自动登录或等待用户点击登录按钮
+            // loginButton.click();
+          }
+        }
+      } catch (e) {
+        console.error('解析保存的用户信息失败:', e);
+        localStorage.removeItem('currentUser');
+      }
+    }
     
   } catch (error) {
     handleError(error, '应用初始化失败');

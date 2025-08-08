@@ -320,6 +320,81 @@ ipcMain.handle('register-user', async (event, username) => {
   }
 });
 
+// 用户登录验证
+ipcMain.handle('login-user', async (event, userId) => {
+  try {
+    const dbInstance = getDb();
+    return new Promise((resolve, reject) => {
+      // 查询用户信息
+      dbInstance.get("SELECT id, username, nickname, avatar FROM users WHERE id = ?", [userId], (err, row) => {
+        if (err) {
+          handleError(err, '查询用户数据失败 (登录IPC)');
+          reject(err);
+          return;
+        }
+
+        if (!row) {
+          resolve({ success: false, message: '用户不存在' });
+          return;
+        }
+
+        // 更新最后登录时间
+        dbInstance.run(
+          "UPDATE users SET last_login = datetime('now') WHERE id = ?", 
+          [userId], 
+          async function(err) {
+            if (err) {
+              console.error('更新登录时间失败:', err);
+              // 继续处理，不影响登录
+            }
+            
+            // 同步数据库到WebDAV
+            try {
+              await syncDbToWebDAV();
+            } catch (syncErr) {
+              console.error('数据库同步到WebDAV失败:', syncErr);
+              // 继续处理，不影响登录
+            }
+            
+            resolve({ 
+              success: true, 
+              user: {
+                id: row.id,
+                username: row.username,
+                nickname: row.nickname,
+                avatar: row.avatar
+              }
+            });
+          }
+        );
+      });
+    });
+  } catch (error) {
+    handleError(error, '用户登录失败 (IPC)');
+    throw error;
+  }
+});
+
+// 获取聊天用户列表（排除当前用户）
+ipcMain.handle('get-chat-users', async (event, currentUserId) => {
+  try {
+    const dbInstance = getDb();
+    return new Promise((resolve, reject) => {
+      dbInstance.all("SELECT id, username, nickname, avatar FROM users WHERE id != ?", [currentUserId], (err, rows) => {
+        if (err) {
+          handleError(err, '查询聊天用户数据失败 (IPC)');
+          reject(err);
+          return;
+        }
+        resolve(rows);
+      });
+    });
+  } catch (error) {
+    handleError(error, '获取聊天用户失败 (IPC)');
+    throw error;
+  }
+});
+
 /**
  * 关闭数据库连接
  */
