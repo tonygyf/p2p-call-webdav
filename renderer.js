@@ -29,10 +29,7 @@ const client = createClient(
  */
 const webdavPaths = {
   root: WEBDAV_ROOT,
-  database: `${WEBDAV_ROOT}/${config.paths.database}`,
-  messages: `${WEBDAV_ROOT}/${config.paths.messages}`,
-  files: `${WEBDAV_ROOT}/${config.paths.files}`,
-  users: `${WEBDAV_ROOT}/${config.paths.users}`
+  database: `${WEBDAV_ROOT}/${config.paths.database}`
 };
 
 /**
@@ -160,10 +157,7 @@ async function initWebDAVFolders() {
     // 检查并创建必要的目录
     const directories = [
       webdavPaths.root,
-      webdavPaths.database,
-      webdavPaths.messages,
-      webdavPaths.files,
-      webdavPaths.users
+      webdavPaths.database
     ];
     
     for (const dir of directories) {
@@ -506,42 +500,17 @@ async function loadChatHistory() {
     loadingMsg.textContent = '正在加载聊天历史...';
     chatContainer.appendChild(loadingMsg);
     
-    // 从WebDAV获取消息文件列表
-    const files = await client.getDirectoryContents(webdavPaths.messages);
-    
-    // 过滤出JSON文件并按时间排序
-    const messageFiles = files
-      .filter(file => file.type === 'file' && file.basename.endsWith('.json'))
-      .sort((a, b) => {
-        // 尝试从文件名中提取时间戳
-        const timeA = a.basename.match(/_(\d+)\./)?.[1] || a.lastmod;
-        const timeB = b.basename.match(/_(\d+)\./)?.[1] || b.lastmod;
-        return timeA - timeB;
-      });
+    // 从数据库获取聊天历史
+    const messages = await ipcRenderer.invoke('get-chat-history', {
+      userId: currentUser.id,
+      recipientId: recipientId
+    });
     
     // 移除加载提示
     chatContainer.removeChild(loadingMsg);
     
-    // 过滤出与当前聊天对象相关的消息
-    const relevantMessages = [];
-    
-    for (const file of messageFiles) {
-      try {
-        const content = await client.getFileContents(`${webdavPaths.messages}/${file.basename}`);
-        const msg = JSON.parse(content.toString());
-        
-        // 只处理与当前用户和选中聊天对象相关的消息
-        if ((msg.from === currentUser.id && msg.to === recipientId) || 
-            (msg.from === recipientId && msg.to === currentUser.id)) {
-          relevantMessages.push({ file, msg });
-        }
-      } catch (error) {
-        console.error(`处理消息 ${file.basename} 失败:`, error);
-      }
-    }
-    
     // 如果没有相关消息，显示提示
-    if (relevantMessages.length === 0) {
+    if (messages.length === 0) {
       const noMsgDiv = document.createElement('div');
       noMsgDiv.className = 'message system';
       noMsgDiv.textContent = '没有聊天记录，开始发送消息吧！';
@@ -550,18 +519,15 @@ async function loadChatHistory() {
     }
     
     // 限制加载的消息数量，避免过多消息导致性能问题
-    const recentMessages = relevantMessages.slice(-50); // 只加载最近的50条消息
-    
-    // 按时间升序排列，旧消息在前
-    recentMessages.sort((a, b) => a.msg.time - b.msg.time);
+    const recentMessages = messages.slice(-50); // 只加载最近的50条消息
     
     // 加载消息
-    for (const { msg } of recentMessages) {
+    for (const msg of recentMessages) {
       // 显示消息
       if (msg.type === 'text') {
         try {
           const decrypted = decrypt(msg.iv, msg.content);
-          const isOwn = msg.from === currentUser.id;
+          const isOwn = msg.sender === currentUser.id;
           // 根据消息是否是自己发送的来设置类型参数
           addMessage(isOwn ? decrypted : `${msg.fromName}: ${decrypted}`, isOwn);
         } catch (error) {
@@ -643,10 +609,11 @@ function displayFileMessage(msg) {
       downloadBtn.textContent = '下载中...';
       downloadBtn.disabled = true;
       
-      const encryptedContent = await client.getFileContents(msg.content);
+      // 从消息内容中直接获取加密的文件内容
+      const encryptedContent = Buffer.from(msg.content, 'base64');
       const iv = Buffer.from(msg.iv, 'base64');
       const decipher = crypto.createDecipheriv(algorithm, key, iv);
-      let decrypted = decipher.update(Buffer.from(encryptedContent));
+      let decrypted = decipher.update(encryptedContent);
       decrypted = Buffer.concat([decrypted, decipher.final()]);
       
       const blob = new Blob([decrypted], { type: msg.fileType || 'application/octet-stream' });
@@ -737,11 +704,9 @@ function initChatFeatures() {
       let encrypted = cipher.update(Buffer.from(fileBuffer));
       encrypted = Buffer.concat([encrypted, cipher.final()]);
 
-      // 生成唯一文件名并上传到WebDAV
+      // 生成唯一文件ID
       const fileId = crypto.randomUUID();
-      const fileName = `${webdavPaths.files}/${fileId}`;
-      await client.putFileContents(fileName, encrypted, { overwrite: false });
-
+      
       // 获取当前时间戳
       const timestamp = Date.now();
       
@@ -754,19 +719,16 @@ function initChatFeatures() {
         time: timestamp,
         type: 'file',
         iv: iv.toString('base64'),
-        content: fileName,
+        content: encrypted.toString('base64'), // 直接将加密后的文件内容存储在数据库中
         originalName: file.name,
         fileSize: file.size,
-        fileType: file.type || 'application/octet-stream'
+        fileType: file.type || 'application/octet-stream',
+        fileId: fileId
       };
 
-      // 生成消息ID并保存消息数据
-      const msgId = timestamp + '_' + crypto.randomUUID();
-      await client.putFileContents(
-        `${webdavPaths.messages}/msg_${msgId}.json`,
-        JSON.stringify(msgData),
-        { overwrite: false }
-      );
+      // 将文件消息保存到数据库
+      await ipcRenderer.invoke('save-file-message', msgData);
+      console.log('文件消息已保存到数据库');
 
       // 移除上传中提示
       chatContainer.removeChild(uploadingMsg);
@@ -841,13 +803,10 @@ function initChatFeatures() {
         content: encrypted.content
       };
 
-      // 生成消息ID并保存消息数据
+      // 将消息保存到数据库
       const msgId = timestamp + '_' + crypto.randomUUID();
-      await client.putFileContents(
-        `${webdavPaths.messages}/msg_${msgId}.json`,
-        JSON.stringify(msgData),
-        { overwrite: false }
-      );
+      await ipcRenderer.invoke('save-message', msgData);
+      console.log('消息已保存到数据库');
     } catch (error) {
       handleError(error, '消息发送失败');
     }
@@ -875,63 +834,47 @@ function initChatFeatures() {
         return;
       }
       
-      // 获取消息文件列表
-      const files = await client.getDirectoryContents(webdavPaths.messages);
-      
-      // 过滤出JSON文件并按时间排序
-      const messageFiles = files
-        .filter(file => file.type === 'file' && file.basename.endsWith('.json'))
-        .sort((a, b) => {
-          // 尝试从文件名中提取时间戳
-          const timeA = a.basename.match(/_(\d+)\./)?.[1] || a.lastmod;
-          const timeB = b.basename.match(/_(\d+)\./)?.[1] || b.lastmod;
-          return timeA - timeB;
-        });
+      // 从数据库获取新消息
+      const messages = await ipcRenderer.invoke('get-new-messages', {
+        userId: currentUser.id,
+        recipientId: recipientId,
+        lastPollTime: lastPollTime
+      });
       
       // 处理新消息
-      for (const file of messageFiles) {
+      for (const msg of messages) {
+        // 生成消息ID
+        const msgId = `msg_${msg.time}_${msg.from}`;
+        
         // 如果已经处理过该消息，跳过
-        if (processedMessages.has(file.basename)) {
+        if (processedMessages.has(msgId)) {
           continue;
         }
         
-        try {
-          // 获取消息内容
-          const content = await client.getFileContents(`${webdavPaths.messages}/${file.basename}`);
-          const msg = JSON.parse(content.toString());
-          
-          // 将消息标记为已处理
-          processedMessages.add(file.basename);
-          
-          // 如果消息时间早于最后一次轮询时间，跳过（避免重复显示历史消息）
-          if (msg.time && msg.time < lastPollTime) {
-            continue;
+        // 将消息标记为已处理
+        processedMessages.add(msgId);
+        
+        // 不显示自己发送的消息（已在发送时显示）
+        if (msg.sender === currentUser.id) {
+          continue;
+        }
+        
+        // 只处理来自当前选中聊天对象的消息
+        if (msg.sender !== recipientId || msg.recipient !== currentUser.id) {
+          continue;
+        }
+        
+        // 根据消息类型处理
+        if (msg.type === 'text') {
+          try {
+            const decrypted = decrypt(msg.iv, msg.content);
+            // 添加消息，false表示接收的消息
+            addMessage(`${msg.fromName}: ${decrypted}`, false);
+          } catch (error) {
+            handleError(error, '消息解密失败');
           }
-          
-          // 不显示自己发送的消息（已在发送时显示）
-          if (msg.from === currentUser.id) {
-            continue;
-          }
-          
-          // 只处理来自当前选中聊天对象的消息
-          if (msg.from !== recipientId || msg.to !== currentUser.id) {
-            continue;
-          }
-          
-          // 根据消息类型处理
-          if (msg.type === 'text') {
-            try {
-              const decrypted = decrypt(msg.iv, msg.content);
-              // 添加消息，false表示接收的消息
-              addMessage(`${msg.fromName}: ${decrypted}`, false);
-            } catch (error) {
-              handleError(error, '消息解密失败');
-            }
-          } else if (msg.type === 'file') {
-            displayFileMessage(msg);
-          }
-        } catch (error) {
-          console.error(`处理消息 ${file.basename} 失败:`, error);
+        } else if (msg.type === 'file') {
+          displayFileMessage(msg);
         }
       }
       

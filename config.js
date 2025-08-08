@@ -32,12 +32,9 @@ module.exports = {
   },
   
   /**
-   * 文件路径配置
-   */
-  paths: {
-    messages: 'chat_messages',
-    files: 'chat_files',
-    users: 'users',
-    database: 'database'
-  }
+ * 文件路径配置
+ */
+paths: {
+  database: 'database'
+}
 };

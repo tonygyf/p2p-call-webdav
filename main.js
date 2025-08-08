@@ -56,7 +56,25 @@ async function initDatabase() {
         return reject(err);
       }
       console.log('连接到本地数据库成功。');
-      resolve(db);
+      
+      // 启用外键约束
+      db.run('PRAGMA foreign_keys = ON;');
+      
+      // 执行数据库更新脚本
+      const updateSqlPath = path.join(__dirname, 'init', 'update_chat_tables.sql');
+      if (fs.existsSync(updateSqlPath)) {
+        const updateSql = fs.readFileSync(updateSqlPath, 'utf8');
+        db.exec(updateSql, (err) => {
+          if (err) {
+            console.error('执行数据库更新脚本失败:', err);
+          } else {
+            console.log('数据库表结构已更新');
+          }
+          resolve(db);
+        });
+      } else {
+        resolve(db);
+      }
     });
   });
 }
@@ -80,7 +98,7 @@ async function syncDbToWebDAV() {
   try {
     // 确保WebDAV目录存在
     const webdavRoot = 'claude_chat';
-    const dbDir = `${webdavRoot}/database`;
+    const dbDir = `${webdavRoot}/${config.paths.database}`;
     
     // 检查并创建根目录
     try {
@@ -392,6 +410,170 @@ ipcMain.handle('get-chat-users', async (event, currentUserId) => {
   } catch (error) {
     handleError(error, '获取聊天用户失败 (IPC)');
     throw error;
+  }
+});
+
+// 保存消息到数据库
+ipcMain.handle('save-message', async (event, messageData) => {
+  try {
+    const dbInstance = getDb();
+    return new Promise((resolve, reject) => {
+      // 插入消息到数据库
+      dbInstance.run(
+        `INSERT INTO messages (from_user_id, from_user_name, to_user_id, to_user_name, 
+          message_time, message_type, message_iv, message_content) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          messageData.from,
+          messageData.fromName,
+          messageData.to,
+          messageData.toName,
+          messageData.time,
+          messageData.type,
+          messageData.iv,
+          messageData.content
+        ],
+        async function(err) {
+          if (err) {
+            handleError(err, '保存消息失败');
+            reject({ success: false, error: err.message });
+            return;
+          }
+          
+          // 同步数据库到WebDAV
+          try {
+            await syncDbToWebDAV();
+          } catch (syncErr) {
+            console.error('同步数据库到WebDAV失败:', syncErr);
+            // 继续处理，不影响消息保存
+          }
+          
+          resolve({ success: true });
+        }
+      );
+    });
+  } catch (error) {
+    handleError(error, '保存消息失败');
+    return { success: false, error: error.message };
+  }
+});
+
+// 保存文件消息到数据库
+ipcMain.handle('save-file-message', async (event, messageData) => {
+  try {
+    const dbInstance = getDb();
+    return new Promise((resolve, reject) => {
+      // 插入文件消息到数据库
+      dbInstance.run(
+        `INSERT INTO messages (from_user_id, from_user_name, to_user_id, to_user_name, 
+          message_time, message_type, message_iv, message_content, 
+          file_original_name, file_size, file_type, file_id) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          messageData.from,
+          messageData.fromName,
+          messageData.to,
+          messageData.toName,
+          messageData.time,
+          messageData.type,
+          messageData.iv,
+          messageData.content,
+          messageData.originalName,
+          messageData.fileSize,
+          messageData.fileType,
+          messageData.fileId
+        ],
+        async function(err) {
+          if (err) {
+            handleError(err, '保存文件消息失败');
+            reject({ success: false, error: err.message });
+            return;
+          }
+          
+          // 同步数据库到WebDAV
+          try {
+            await syncDbToWebDAV();
+          } catch (syncErr) {
+            console.error('同步数据库到WebDAV失败:', syncErr);
+            // 继续处理，不影响消息保存
+          }
+          
+          resolve({ success: true });
+        }
+      );
+    });
+  } catch (error) {
+    handleError(error, '保存文件消息失败');
+    return { success: false, error: error.message };
+  }
+});
+
+// 获取新消息
+ipcMain.handle('get-new-messages', async (event, { userId, recipientId, lastPollTime }) => {
+  try {
+    // 先从WebDAV同步数据库
+    await syncDbFromWebDAV();
+    
+    const dbInstance = getDb();
+    return new Promise((resolve, reject) => {
+      // 查询新消息
+      dbInstance.all(
+        `SELECT from_user_id as sender, from_user_name as fromName, 
+                to_user_id as recipient, to_user_name as toName, 
+                message_time as time, message_type as type, 
+                message_iv as iv, message_content as content 
+         FROM messages 
+         WHERE message_time > ? 
+           AND ((from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)) 
+         ORDER BY message_time ASC`,
+        [lastPollTime, recipientId, userId, userId, recipientId],
+        (err, rows) => {
+          if (err) {
+            handleError(err, '获取新消息失败');
+            reject([]);
+            return;
+          }
+          resolve(rows);
+        }
+      );
+    });
+  } catch (error) {
+    handleError(error, '获取新消息失败');
+    return [];
+  }
+});
+
+// 获取聊天历史记录
+ipcMain.handle('get-chat-history', async (event, { userId, recipientId }) => {
+  try {
+    // 先从WebDAV同步数据库
+    await syncDbFromWebDAV();
+    
+    const dbInstance = getDb();
+    return new Promise((resolve, reject) => {
+      // 查询聊天历史记录
+      dbInstance.all(
+        `SELECT from_user_id as sender, from_user_name as fromName, 
+                to_user_id as recipient, to_user_name as toName, 
+                message_time as time, message_type as type, 
+                message_iv as iv, message_content as content 
+         FROM messages 
+         WHERE ((from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)) 
+         ORDER BY message_time ASC`,
+        [userId, recipientId, recipientId, userId],
+        (err, rows) => {
+          if (err) {
+            handleError(err, '获取聊天历史记录失败');
+            reject([]);
+            return;
+          }
+          resolve(rows);
+        }
+      );
+    });
+  } catch (error) {
+    handleError(error, '获取聊天历史记录失败');
+    return [];
   }
 });
 
