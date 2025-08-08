@@ -159,7 +159,7 @@ async function syncDbFromWebDAV() {
       await client.stat(webdavDbPath);
       
       // 下载数据库文件
-      let content = await client.getFileContents(webdavDbPath);
+      let content = await client.getFileContents(webdavDbPath, { format: 'binary' });
       
       // 确保content是Buffer
       if (!(content instanceof Buffer)) {
@@ -413,8 +413,8 @@ function closeDb() {
 // 当Electron完成初始化并准备创建浏览器窗口时调用此方法
 app.whenReady().then(async () => {
   try {
-    await initDatabase();
-    await syncDbFromWebDAV(); // Initial sync from WebDAV
+    await syncDbFromWebDAV(); // Get latest DB from WebDAV first
+    await initDatabase(); // Then open database connection
     createWindow();
   } catch (error) {
     handleError(error, '应用启动失败');

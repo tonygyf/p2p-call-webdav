@@ -950,7 +950,7 @@ function initChatFeatures() {
     }
   }
   }
-}
+
 
 // 初始化应用
 async function initApp() {
