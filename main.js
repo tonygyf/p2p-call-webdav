@@ -6,8 +6,8 @@ const crypto = require('crypto'); // For encryption/decryption if needed, or jus
 const { createClient } = require('webdav'); // For WebDAV interaction
 const config = require('./config');
 
-const localDbPath = path.join(app.getPath('userData'), 'MySQLiteDB.db');
-const initialDbPath = path.join(__dirname, 'init', 'MySQLiteDB.db');
+const localDbPath = path.join(app.getPath('userData'), 'call.db');
+const initialDbPath = path.join('d:\\typer\\cursor project\\claude\\init', 'call.db');
 
 let db = null; // Global database instance
 
@@ -78,7 +78,36 @@ function getDb() {
  */
 async function syncDbToWebDAV() {
   try {
-    const dbFileName = `${config.paths.users}/MySQLiteDB.db`;
+    // 确保WebDAV目录存在
+    const webdavRoot = 'claude_chat';
+    const dbDir = `${webdavRoot}/database`;
+    
+    // 检查并创建根目录
+    try {
+      await client.stat(webdavRoot);
+    } catch (e) {
+      if (e.response && e.response.status === 404) {
+        await client.createDirectory(webdavRoot);
+        console.log(`创建WebDAV根目录: ${webdavRoot}`);
+      } else {
+        throw e;
+      }
+    }
+    
+    // 检查并创建数据库目录
+    try {
+      await client.stat(dbDir);
+    } catch (e) {
+      if (e.response && e.response.status === 404) {
+        await client.createDirectory(dbDir);
+        console.log(`创建WebDAV数据库目录: ${dbDir}`);
+      } else {
+        throw e;
+      }
+    }
+    
+    // 上传数据库文件
+    const dbFileName = `${dbDir}/call.db`;
     const dbBuffer = fs.readFileSync(localDbPath);
     await client.putFileContents(dbFileName, dbBuffer, { overwrite: true });
     console.log('数据库成功同步到WebDAV。');
@@ -94,38 +123,72 @@ async function syncDbToWebDAV() {
  */
 async function syncDbFromWebDAV() {
   try {
-    const dbFileName = `${config.paths.users}/MySQLiteDB.db`;
-    let needDownload = false;
+    console.log('开始从WebDAV同步数据库...');
+    
+    // 检查WebDAV上的数据库文件是否存在
+    const webdavRoot = 'claude_chat';
+    const dbDir = `${webdavRoot}/${config.paths.database}`;
+    const webdavDbPath = `${dbDir}/call.db`;
+    
     try {
-      await client.stat(dbFileName);
-      console.log('WebDAV上数据库已存在');
-      needDownload = true; // If exists, download to ensure latest version
+      // 检查并创建根目录
+      try {
+        await client.stat(webdavRoot);
+      } catch (e) {
+        if (e.response && e.response.status === 404) {
+          await client.createDirectory(webdavRoot);
+          console.log(`创建WebDAV根目录: ${webdavRoot}`);
+        } else {
+          throw e;
+        }
+      }
+      
+      // 检查并创建数据库目录
+      try {
+        await client.stat(dbDir);
+      } catch (e) {
+        if (e.response && e.response.status === 404) {
+          await client.createDirectory(dbDir);
+          console.log(`创建WebDAV数据库目录: ${dbDir}`);
+        } else {
+          throw e;
+        }
+      }
+      
+      // 检查数据库文件
+      await client.stat(webdavDbPath);
+      
+      // 下载数据库文件
+      let content = await client.getFileContents(webdavDbPath);
+      
+      // 确保content是Buffer
+      if (!(content instanceof Buffer)) {
+        content = Buffer.from(content);
+      }
+      
+      // 备份当前数据库（如果存在）
+      if (fs.existsSync(localDbPath)) {
+        const backupPath = `${localDbPath}.backup-${Date.now()}`;
+        fs.copyFileSync(localDbPath, backupPath);
+        console.log(`本地数据库已备份到: ${backupPath}`);
+      }
+      
+      // 写入下载的数据库文件
+      fs.writeFileSync(localDbPath, content);
+      console.log('从WebDAV同步数据库成功。');
     } catch (e) {
       if (e.response && e.response.status === 404) {
-        console.log('WebDAV上数据库不存在，无需下载。');
+        console.log('WebDAV上不存在数据库文件，将上传本地数据库。');
+        // 确保本地数据库存在
+        if (!fs.existsSync(localDbPath)) {
+          console.log('本地数据库不存在，从初始数据库复制...');
+          fs.copyFileSync(initialDbPath, localDbPath);
+          console.log('本地数据库复制成功。');
+        }
+        await syncDbToWebDAV();
       } else {
         throw e;
       }
-    }
-
-    if (needDownload) {
-      console.log(`尝试从WebDAV下载文件: ${dbFileName}`);
-      const content = await client.getFileContents(dbFileName); // 移除 format: 'buffer' 选项
-      console.log(`从WebDAV下载内容成功。内容类型: ${typeof content}, 内容长度: ${content ? content.length : 'N/A'}`);
-      
-      let bufferContent;
-      if (content instanceof Buffer) {
-        bufferContent = content;
-      } else if (typeof content === 'string') {
-        // 假设如果不是Buffer，它可能是UTF-8编码的字符串
-        bufferContent = Buffer.from(content, 'utf8'); 
-        console.log('将字符串内容转换为Buffer。');
-      } else {
-        throw new Error(`从WebDAV获取的文件内容不是Buffer或字符串类型，实际类型: ${typeof content}`);
-      }
-
-      fs.writeFileSync(localDbPath, bufferContent);
-      console.log('数据库成功从WebDAV下载到本地。');
     }
   } catch (error) {
     handleError(error, '从WebDAV同步数据库失败');
@@ -178,7 +241,7 @@ ipcMain.handle('get-users', async () => {
   try {
     const dbInstance = getDb();
     return new Promise((resolve, reject) => {
-      dbInstance.all("SELECT id, name FROM users", [], (err, rows) => {
+      dbInstance.all("SELECT id, username, nickname, avatar FROM users", [], (err, rows) => {
         if (err) {
           handleError(err, '查询用户数据失败 (IPC)');
           reject(err);
@@ -193,12 +256,25 @@ ipcMain.handle('get-users', async () => {
   }
 });
 
+// 上传数据库到WebDAV
+ipcMain.handle('upload-db-to-webdav', async (event, webdavPath) => {
+  try {
+    const dbBuffer = fs.readFileSync(localDbPath);
+    await client.putFileContents(webdavPath, dbBuffer, { overwrite: true });
+    console.log(`数据库成功上传到WebDAV路径: ${webdavPath}`);
+    return { success: true };
+  } catch (error) {
+    handleError(error, '上传数据库到WebDAV失败');
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('register-user', async (event, username) => {
   try {
     const dbInstance = getDb();
     return new Promise((resolve, reject) => {
       // 检查用户名是否已存在
-      dbInstance.get("SELECT id FROM users WHERE name = ?", [username], (err, row) => {
+      dbInstance.get("SELECT id FROM users WHERE username = ?", [username], (err, row) => {
         if (err) {
           handleError(err, '查询用户数据失败 (注册IPC)');
           reject(err);
@@ -210,18 +286,32 @@ ipcMain.handle('register-user', async (event, username) => {
           return;
         }
 
+        // 生成默认昵称和头像
+        const nickname = username; // 默认昵称与用户名相同
+        const avatar = null; // 默认头像为空
+
         // 插入新用户
-        dbInstance.run("INSERT INTO users (name) VALUES (?)", [username], async function(err) {
-          if (err) {
-            handleError(err, '创建用户失败 (注册IPC)');
-            reject(err);
-            return;
+        dbInstance.run(
+          "INSERT INTO users (username, nickname, avatar, created_at) VALUES (?, ?, ?, datetime('now'))", 
+          [username, nickname, avatar], 
+          async function(err) {
+            if (err) {
+              handleError(err, '创建用户失败 (注册IPC)');
+              reject(err);
+              return;
+            }
+            console.log(`创建用户成功，ID: ${this.lastID}`);
+            // 注册成功后同步数据库到WebDAV
+            try {
+              await syncDbToWebDAV();
+              console.log('数据库同步到WebDAV成功');
+            } catch (syncErr) {
+              console.error('数据库同步到WebDAV失败:', syncErr);
+              // 继续处理，不影响用户注册
+            }
+            resolve({ success: true, userId: this.lastID });
           }
-          console.log(`创建用户成功，ID: ${this.lastID}`);
-          // 注册成功后同步数据库到WebDAV
-          await syncDbToWebDAV();
-          resolve({ success: true, userId: this.lastID });
-        });
+        );
       });
     });
   } catch (error) {

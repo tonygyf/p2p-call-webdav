@@ -4,8 +4,8 @@
   "description": "基于WebDAV的点对点加密聊天应用",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev",
+    "start": "chcp 65001 && electron .",
+    "dev": "chcp 65001 && electron . --dev",
     "build": "electron-builder",
     "install-deps": "npm install"
   },
