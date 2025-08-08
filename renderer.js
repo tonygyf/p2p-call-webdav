@@ -368,8 +368,10 @@ async function initChatPage() {
     // 获取聊天用户列表（排除当前用户）
     const chatUsers = await ipcRenderer.invoke('get-chat-users', currentUser.id);
     
-    // 移除加载中选项
-    recipientSelect.removeChild(loadingOption);
+    // 移除加载中选项（安全检查）
+    if (loadingOption && loadingOption.parentNode === recipientSelect) {
+      recipientSelect.removeChild(loadingOption);
+    }
     
     if (chatUsers.length === 0) {
       const noUserOption = document.createElement('option');
@@ -506,8 +508,10 @@ async function loadChatHistory() {
       recipientId: recipientId
     });
     
-    // 移除加载提示
-    chatContainer.removeChild(loadingMsg);
+    // 移除加载提示（安全检查）
+    if (loadingMsg && loadingMsg.parentNode === chatContainer) {
+      chatContainer.removeChild(loadingMsg);
+    }
     
     // 如果没有相关消息，显示提示
     if (messages.length === 0) {
@@ -556,7 +560,7 @@ async function loadChatHistory() {
  * @param {Object} msg - 消息对象
  */
 function displayFileMessage(msg) {
-  const isOwn = msg.from === currentUser.id;
+  const isOwn = msg.sender === currentUser.id;
   const fileDiv = document.createElement('div');
   fileDiv.className = `message file-message ${isOwn ? 'sent' : 'received'}`;
   
@@ -573,7 +577,7 @@ function displayFileMessage(msg) {
   // 创建文件名
   const fileName = document.createElement('div');
   fileName.className = 'file-name';
-  fileName.textContent = isOwn ? msg.originalName : `${msg.originalName}`;
+  fileName.textContent = isOwn ? msg.original_name : `${msg.original_name}`;
   fileInfo.appendChild(fileName);
   
   // 如果不是自己发送的，显示发送者
@@ -588,10 +592,10 @@ function displayFileMessage(msg) {
   }
   
   // 创建文件大小信息（如果有）
-  if (msg.fileSize) {
+  if (msg.file_size) {
     const fileSize = document.createElement('div');
     fileSize.className = 'file-size';
-    fileSize.textContent = formatFileSize(msg.fileSize);
+    fileSize.textContent = formatFileSize(msg.file_size);
     fileInfo.appendChild(fileSize);
   }
   
@@ -616,11 +620,11 @@ function displayFileMessage(msg) {
       let decrypted = decipher.update(encryptedContent);
       decrypted = Buffer.concat([decrypted, decipher.final()]);
       
-      const blob = new Blob([decrypted], { type: msg.fileType || 'application/octet-stream' });
+      const blob = new Blob([decrypted], { type: msg.file_type || 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = msg.originalName;
+      a.download = msg.original_name;
       a.click();
       URL.revokeObjectURL(url);
       
@@ -712,26 +716,28 @@ function initChatFeatures() {
       
       // 创建消息数据
       const msgData = {
-        from: currentUser.id,
-        fromName: currentUser.displayName,
-        to: recipientId,
-        toName: recipientName,
-        time: timestamp,
-        type: 'file',
+        from_user_id: currentUser.id,
+        from_user_name: currentUser.displayName,
+        to_user_id: recipientId,
+        to_user_name: recipientName,
+        message_time: timestamp,
+        message_type: 'file',
         iv: iv.toString('base64'),
         content: encrypted.toString('base64'), // 直接将加密后的文件内容存储在数据库中
-        originalName: file.name,
-        fileSize: file.size,
-        fileType: file.type || 'application/octet-stream',
-        fileId: fileId
+        original_name: file.name,
+        file_size: file.size,
+        file_type: file.type || 'application/octet-stream',
+        file_id: fileId
       };
 
       // 将文件消息保存到数据库
       await ipcRenderer.invoke('save-file-message', msgData);
       console.log('文件消息已保存到数据库');
 
-      // 移除上传中提示
-      chatContainer.removeChild(uploadingMsg);
+      // 移除上传中提示（安全检查）
+      if (uploadingMsg && uploadingMsg.parentNode === chatContainer) {
+        chatContainer.removeChild(uploadingMsg);
+      }
       
       // 显示文件消息
       displayFileMessage(msgData);
@@ -793,12 +799,12 @@ function initChatFeatures() {
       
       // 创建消息数据
       const msgData = {
-        from: currentUser.id,
-        fromName: currentUser.displayName,
-        to: recipientId,
-        toName: recipientName,
-        time: timestamp,
-        type: 'text',
+        from_user_id: currentUser.id,
+        from_user_name: currentUser.displayName,
+        to_user_id: recipientId,
+        to_user_name: recipientName,
+        message_time: timestamp,
+        message_type: 'text',
         iv: encrypted.iv,
         content: encrypted.content
       };

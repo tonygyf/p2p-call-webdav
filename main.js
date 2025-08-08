@@ -424,12 +424,12 @@ ipcMain.handle('save-message', async (event, messageData) => {
           message_time, message_type, message_iv, message_content) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          messageData.from,
-          messageData.fromName,
-          messageData.to,
-          messageData.toName,
-          messageData.time,
-          messageData.type,
+          messageData.from_user_id,
+          messageData.from_user_name,
+          messageData.to_user_id,
+          messageData.to_user_name,
+          messageData.message_time,
+          messageData.message_type,
           messageData.iv,
           messageData.content
         ],
@@ -470,18 +470,18 @@ ipcMain.handle('save-file-message', async (event, messageData) => {
           file_original_name, file_size, file_type, file_id) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          messageData.from,
-          messageData.fromName,
-          messageData.to,
-          messageData.toName,
-          messageData.time,
-          messageData.type,
+          messageData.from_user_id,
+          messageData.from_user_name,
+          messageData.to_user_id,
+          messageData.to_user_name,
+          messageData.message_time,
+          messageData.message_type,
           messageData.iv,
           messageData.content,
-          messageData.originalName,
-          messageData.fileSize,
-          messageData.fileType,
-          messageData.fileId
+          messageData.original_name,
+          messageData.file_size,
+          messageData.file_type,
+          messageData.file_id
         ],
         async function(err) {
           if (err) {
