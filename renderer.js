@@ -593,7 +593,7 @@ async function loadChatHistory() {
       if (msg.type === 'text') {
         try {
           const decrypted = decrypt(msg.iv, msg.content);
-          const isOwn = msg.sender === currentUser.id;
+          const isOwn = parseInt(msg.sender) === currentUser.id;
           // 根据消息是否是自己发送的来设置类型参数
           addMessage(isOwn ? decrypted : `${msg.fromName}: ${decrypted}`, isOwn);
         } catch (error) {
@@ -622,7 +622,7 @@ async function loadChatHistory() {
  * @param {Object} msg - 消息对象
  */
 function displayFileMessage(msg) {
-  const isOwn = msg.sender === currentUser.id;
+  const isOwn = parseInt(msg.sender) === currentUser.id;
   const fileDiv = document.createElement('div');
   fileDiv.className = `message file-message ${isOwn ? 'sent' : 'received'}`;
   
@@ -958,13 +958,13 @@ function initChatFeatures() {
         processedMessages.add(msgId);
         
         // 不显示自己发送的消息（已在发送时显示）
-        if (msg.sender === currentUser.id) {
+        if (parseInt(msg.sender) === currentUser.id) {
           continue;
         }
         
         // 处理当前聊天对象之间的双向消息
-        const isValidChat = (msg.sender === parseInt(recipientId) && msg.recipient === currentUser.id) || 
-                           (msg.sender === currentUser.id && msg.recipient === parseInt(recipientId));
+        const isValidChat = (parseInt(msg.sender) === parseInt(recipientId) && parseInt(msg.recipient) === currentUser.id) || 
+                           (parseInt(msg.sender) === currentUser.id && parseInt(msg.recipient) === parseInt(recipientId));
         if (!isValidChat) {
           continue;
         }
