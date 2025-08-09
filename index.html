@@ -2,6 +2,11 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
   <title>WebDAV P2P Chat</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; height: 100vh; display: flex; flex-direction: column; }
@@ -68,6 +73,96 @@
       text-align: center; 
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
       background-color: #fff;
+    }
+
+    /* 移动端响应式设计 */
+    @media (max-width: 768px) {
+      body {
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+      }
+      
+      #login-container, #register-container {
+        margin: 0;
+        max-width: 100%;
+        height: 100vh;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      
+      #chat-container {
+        height: calc(100vh - 120px);
+        border: none;
+        border-top: 1px solid #ccc;
+        margin-bottom: 0;
+      }
+      
+      #controls {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        padding: 10px;
+        border-top: 1px solid #ccc;
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+      }
+      
+      .message {
+        max-width: 90%;
+        margin: 5px 10px;
+      }
+      
+      .sent {
+        margin-left: auto;
+        margin-right: 10px;
+      }
+      
+      .received {
+        margin-left: 10px;
+        margin-right: auto;
+      }
+      
+      .file-message {
+        flex-direction: column;
+        align-items: flex-start;
+        margin: 5px 10px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      #login-container, #register-container {
+        padding: 15px;
+      }
+      
+      .user-item {
+        padding: 15px 10px;
+      }
+      
+      .avatar-placeholder, .user-avatar {
+        width: 50px;
+        height: 50px;
+      }
+      
+      #controls {
+        padding: 8px;
+        gap: 8px;
+      }
+      
+      #message-input {
+        padding: 12px;
+        font-size: 16px; /* 防止iOS缩放 */
+      }
+      
+      #send-button, #attach-button {
+        padding: 12px 16px;
+        font-size: 16px;
+      }
     }
     #user-list { 
       list-style: none; 
@@ -441,6 +536,20 @@
     
     .hidden { display: none; }
   </style>
+  <script>
+    // 注册Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(registration => {
+            console.log('SW registered: ', registration);
+          })
+          .catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+          });
+      });
+    }
+  </script>
 </head>
 <body>
   <!-- 登录页面 -->
