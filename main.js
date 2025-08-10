@@ -236,9 +236,6 @@ function createWindow() {
   // 开发模式下打开开发者工具
   if (process.argv.includes('--dev')) {
     win.webContents.openDevTools();
-  } else {
-    // 非开发模式也打开开发者工具，方便调试
-    win.webContents.openDevTools();
   }
 
   // 处理窗口关闭事件

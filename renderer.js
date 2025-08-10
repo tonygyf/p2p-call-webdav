@@ -351,8 +351,8 @@ async function initChatPage() {
   addMessage(`欢迎, ${currentUser.displayName}!`, 'system');
   
   // 更新页面标题和聊天标题
-  document.title = `WebDAV Chat - ${currentUser.displayName}`;
   document.getElementById('chat-title').textContent = `WebDAV 聊天 - ${currentUser.displayName}`;
+  document.title = `WebDAV 聊天 - ${currentUser.displayName}`;
   
   // 获取聊天对象列表
   try {
@@ -428,6 +428,7 @@ async function initChatPage() {
           const selectedOption = recipientSelect.options[recipientSelect.selectedIndex];
           const recipientName = selectedOption.textContent;
           document.getElementById('chat-title').textContent = `与 ${recipientName} 聊天`;
+          document.title = `与 ${recipientName} 聊天 - WebDAV P2P Chat`;
         } else {
           // 禁用消息输入和发送
           messageInput.disabled = true;
