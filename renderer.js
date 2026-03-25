@@ -276,20 +276,37 @@ function displayUserList(users) {
     userDiv.className = 'user-item';
     
     // 添加头像（如果有）
-    if (user.avatar) {
+    if (user.avatar && typeof user.avatar === 'string' && user.avatar.trim() !== '') {
       const avatarImg = document.createElement('img');
       avatarImg.src = user.avatar;
       avatarImg.className = 'user-avatar';
       avatarImg.alt = user.displayName;
+      
+      // 图片加载失败时的回退处理
+      avatarImg.onerror = function() {
+        // 创建默认头像
+        const avatarPlaceholder = document.createElement('div');
+        avatarPlaceholder.className = 'avatar-placeholder';
+        const hue = (Math.abs(user.id) * 137.508) % 360;
+        const randomColor = `hsl(${hue}, 75%, 50%)`;
+        avatarPlaceholder.style.backgroundColor = randomColor;
+        avatarPlaceholder.textContent = user.displayName.charAt(0).toUpperCase();
+        
+        // 替换损坏的图片
+        if (this.parentNode) {
+          this.parentNode.replaceChild(avatarPlaceholder, this);
+        }
+      };
+      
       userDiv.appendChild(avatarImg);
     } else {
       // 创建默认头像（用户名首字母）
       const avatarPlaceholder = document.createElement('div');
       avatarPlaceholder.className = 'avatar-placeholder';
-      // 使用随机颜色
-      const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
-      const colorIndex = user.id % colors.length;
-      avatarPlaceholder.style.backgroundColor = colors[colorIndex];
+      // 生成一个基于用户ID的稳定随机颜色
+      const hue = (Math.abs(user.id) * 137.508) % 360;
+      const randomColor = `hsl(${hue}, 75%, 50%)`;
+      avatarPlaceholder.style.backgroundColor = randomColor;
       avatarPlaceholder.textContent = user.displayName.charAt(0).toUpperCase();
       userDiv.appendChild(avatarPlaceholder);
     }
