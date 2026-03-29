@@ -7,97 +7,96 @@
   <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
 </p>
 
-> 🚀 现代化的点对点通话与聊天桌面应用，基于 Electron 构建，使用 WebDAV 作为安全存储后端。
+<p align="center">
+  <img src="docs/展示.png" alt="应用截图" width="800"/>
+</p>
+
+> 🚀 一款现代化的点对点通话与聊天桌面应用，基于 Electron 构建，并使用 WebDAV 作为安全、去中心化的存储后端。
 
 ---
 
-## ✨ 主要特性
+## ✨ 核心特性
 
-- 🔒 端到端加密，保障隐私安全
-- 📞 实时音视频通话与消息同步
-- 📎 文件安全传输
-- 🌐 跨平台支持（Windows / macOS / Linux）
-- 💡 简洁美观的现代 UI
-- ☁️ WebDAV 云端存储，数据自持有
+- **端到端加密**: 所有通信内容均采用 `AES-256-CBC` 加密，确保您的对话私密安全。
+- **实时通信**: 支持高质量的实时音视频通话和即时消息同步。
+- **文件安全传输**: 加密传输文件，保护您的数据不被泄露。
+- **数据自持**: 通过 WebDAV 协议，将所有数据存储在您自己的云存储或服务器上，实现完全的数据主权。
+- **跨平台支持**: 完美运行于 Windows、macOS 和 Linux。
+- **现代化 UI**: 简洁、美观的用户界面，提供流畅的操作体验。
 
 ---
 
-## 📦 安装与启动
+## 🛠️ 技术栈
 
-### 前置条件
-- Node.js 16+  
-- npm / pnpm / yarn
+- **核心框架**: [Electron](https://www.electronjs.org/)
+- **存储后端**: [WebDAV](https://github.com/perry-mitchell/webdav-client)
+- **主要语言**: Node.js, JavaScript, HTML5, CSS3
 
-### 快速开始
+---
+
+## 🚀 快速开始
+
+### 1. 前置条件
+- **Node.js**: `v16` 或更高版本
+- **包管理器**: `npm`, `pnpm` 或 `yarn`
+
+### 2. 安装与启动
 
 ```bash
-# 克隆仓库
+# 1. 克隆仓库
 git clone <repository-url>
 cd webdav-p2p-call
 
-# 安装依赖
+# 2. 安装依赖
 npm install
 
-# 启动开发环境
+# 3. 启动应用
 npm start
 ```
 
 ---
 
-## ⚙️ 配置
+## ⚙️ 配置指南
 
-编辑 `config.js`，填写你的 WebDAV 服务器信息和加密密钥：
+在项目根目录下，编辑 `config.js` 文件，填入您的 WebDAV 服务器信息和加密密钥。
 
-```js
+```javascript
 module.exports = {
   webdav: {
-    url: 'https://your-webdav-server.com/dav',
-    username: 'your-username',
-    password: 'your-password'
+    url: 'https://your-webdav-server.com/dav', // 您的 WebDAV 服务器地址
+    username: 'your-username',               // 用户名
+    password: 'your-password'                // 密码
   },
   encryption: {
-    secret: 'your-encryption-secret'
+    secret: 'your-encryption-secret'         // 用于生成加密密钥的私密字符串
   }
 };
 ```
 
 ---
 
-## 🛠️ 使用说明
-
-1. 启动应用，登录 WebDAV 账号
-2. 输入对方 ID，发起通话或聊天
-3. 支持文字、文件、音视频实时通信
-4. 所有数据自动加密并存储于 WebDAV
-
----
-
 ## 🔐 安全说明
 
-- 所有消息与文件均采用 AES-256-CBC 加密
-- 通话信令与内容均加密传输
-- 加密密钥仅本地保存，服务端无法解密
-
----
-
-## 🏗️ 技术栈
-
-- [Electron](https://www.electronjs.org/)
-- [WebDAV](https://github.com/perry-mitchell/webdav-client)
-- Node.js / JavaScript
-- HTML5 / CSS3 / 现代前端
+- **消息与文件加密**: 所有消息和文件均在客户端使用 `AES-256-CBC` 算法进行端到端加密。
+- **密钥管理**: 加密密钥由您的 `secret` 在本地生成，仅保存在客户端，服务端无法解密任何数据。
+- **信令安全**: 通话信令与媒体内容在传输过程中均经过加密。
 
 ---
 
 ## 🤝 贡献指南
 
-欢迎 PR 与 Issue！
-1. Fork 本仓库
-2. 新建分支进行开发
-3. 提交 PR 并描述你的更改
+我们欢迎任何形式的贡献！如果您有好的想法或建议，请随时提交 Pull Request 或 Issue。
+
+1.  **Fork** 本仓库
+2.  创建您的特性分支 (`git checkout -b feature/AmazingFeature`)
+3.  提交您的更改 (`git commit -m 'Add some AmazingFeature'`)
+4.  推送到分支 (`git push origin feature/AmazingFeature`)
+5.  提交 **Pull Request**
 
 ---
 
 ## 📄 许可证
 
-MIT License © 2024 tonygyf
+本项目基于 MIT 许可证。详情请参阅 `LICENSE` 文件。
+
+© 2025 tonygyf
